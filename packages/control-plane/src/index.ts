@@ -11,10 +11,10 @@ import { githubOnboarding } from "./github/onboarding";
 import { githubWebhooks } from "./github/webhooks";
 import { RunService } from "./runs/service";
 import { createSlackIntegration } from "./slack";
-import { MemoryStore } from "./store/memory";
+import { createStore } from "./store/create";
 
 const config = loadConfig();
-const store = new MemoryStore();
+const { store, close } = await createStore(process.env);
 const events = new EventBus();
 const github = createGitHubApp(config.github);
 
@@ -47,6 +47,14 @@ events.on("deployment.detected", (e) =>
 events.on("run.started", (e) => console.log(`[run] #${e.run.number} started on ${e.repository.fullName} ${e.stage.name} (${e.run.trigger})`));
 events.on("run.finished", (e) => console.log(`[run] #${e.run.number} finished: ${e.run.status} / ${e.run.verdict}`));
 
-serve({ fetch: app.fetch, port: config.port }, (info) => {
+const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
   console.log(`control-plane listening on http://localhost:${info.port}`);
 });
+
+// Release the port and database connections on Ctrl+C and on tsx watch reloads.
+for (const signal of ["SIGINT", "SIGTERM"] as const) {
+  process.once(signal, () => {
+    server.close();
+    void close().finally(() => process.exit(0));
+  });
+}

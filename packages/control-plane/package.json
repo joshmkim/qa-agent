@@ -9,9 +9,11 @@
     "create-app": "tsx scripts/create-github-app.ts",
     "tunnel": "tsx scripts/tunnel.ts",
     "manifest:check": "tsx scripts/check-manifest.ts",
+    "db:migrate": "tsx scripts/db-migrate.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "lint": "echo 'no lint configured for control-plane'"
+    "lint": "echo 'no lint configured for control-plane'",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "1.19.17",
@@ -22,6 +24,7 @@
     "hono": "4.13.7",
     "octokit": "3.2.2",
     "picomatch": "4.0.7",
+    "postgres": "3.4.9",
     "yaml": "2.9.1",
     "zod": "4.6.4"
   },
