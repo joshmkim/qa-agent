@@ -43,6 +43,8 @@ export interface BrowserSessionOptions {
   /** Extra HTTP headers on every request, e.g. a preprod bypass token. */
   extraHTTPHeaders?: Record<string, string>;
   userAgent?: string;
+  /** Record a .webm of the session next to the screenshots. Off by default. */
+  recordVideo?: boolean;
 }
 
 /** Statuses that count as a hard error regardless of what the UI shows. */
@@ -90,12 +92,14 @@ export class BrowserSession {
 
   private async start(): Promise<void> {
     await mkdir(this.screenshotDir, { recursive: true });
+    const viewport = this.opts.viewport ?? { width: 1280, height: 900 };
     this.browser = await chromium.launch({ headless: this.opts.headless ?? true });
     this.context = await this.browser.newContext({
-      viewport: this.opts.viewport ?? { width: 1280, height: 900 },
+      viewport,
       ignoreHTTPSErrors: true,
       extraHTTPHeaders: this.opts.extraHTTPHeaders,
       userAgent: this.opts.userAgent,
+      ...(this.opts.recordVideo ? { recordVideo: { dir: this.screenshotDir, size: viewport } } : {}),
     });
     this.context.setDefaultTimeout(10_000);
     this.context.setDefaultNavigationTimeout(30_000);
@@ -253,9 +257,20 @@ export class BrowserSession {
     return out;
   }
 
-  async close(): Promise<void> {
+  /**
+   * Close the browser. Returns the recording's path when `recordVideo` was
+   * on: Playwright only finalizes the .webm once the context is closed. With
+   * popups, the main (first) page's video is returned; the rest stay on disk.
+   */
+  async close(): Promise<{ videoPath?: string }> {
+    const first = this.context.pages()[0];
+    const video = this.opts.recordVideo ? first?.video() : undefined;
+    // Ask for the path before closing (the promise resolves after close).
+    const pathPromise = video?.path().catch(() => undefined);
     await this.context.close().catch(() => undefined);
     await this.browser.close().catch(() => undefined);
+    const videoPath = pathPromise ? await pathPromise : undefined;
+    return videoPath ? { videoPath } : {};
   }
 }
 

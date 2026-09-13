@@ -14,6 +14,8 @@ export interface InProcessRunnerOptions {
   /** Extra browser headers, e.g. a preprod bypass token. */
   extraHTTPHeaders?: Record<string, string>;
   maxSteps?: number;
+  /** Record a .webm per agent; path lands on AgentResult.videoPath. */
+  recordVideo?: boolean;
   log?: (msg: string) => void;
 }
 
@@ -31,6 +33,7 @@ export class InProcessAgentRunner implements AgentRunner {
       headless: this.opts.headless,
       extraHTTPHeaders: this.opts.extraHTTPHeaders,
       maxSteps: this.opts.maxSteps,
+      recordVideo: this.opts.recordVideo,
       log: this.opts.log ? (m) => this.opts.log!(`[agent ${bundle.agentId}] ${m}`) : undefined,
     });
   }

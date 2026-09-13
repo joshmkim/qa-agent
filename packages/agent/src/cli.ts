@@ -5,7 +5,8 @@
  *   ANTHROPIC_API_KEY=... pnpm --filter @qa-agent/agent run -- --bundle ./bundle.json --out ./result.json
  *
  * Flags: --bundle <file> (required), --out <file> (default stdout),
- *        --headed (show the browser), --max-steps <n>, --budget <seconds> (override bundle).
+ *        --headed (show the browser), --video (record a .webm),
+ *        --max-steps <n>, --budget <seconds> (override bundle).
  */
 import { readFile, writeFile } from "node:fs/promises";
 import type { ContextBundle } from "@qa-agent/shared-types";
@@ -19,7 +20,7 @@ function arg(name: string): string | undefined {
 async function main(): Promise<void> {
   const bundlePath = arg("bundle");
   if (!bundlePath) {
-    console.error("usage: run --bundle <bundle.json> [--out result.json] [--headed] [--max-steps n] [--budget seconds]");
+    console.error("usage: run --bundle <bundle.json> [--out result.json] [--headed] [--video] [--max-steps n] [--budget seconds]");
     process.exit(2);
   }
   const bundle = JSON.parse(await readFile(bundlePath, "utf8")) as ContextBundle;
@@ -29,9 +30,13 @@ async function main(): Promise<void> {
 
   const result = await runAgent(bundle, {
     headless: !process.argv.includes("--headed"),
+    recordVideo: process.argv.includes("--video") || undefined,
     maxSteps: maxSteps ? Number(maxSteps) : undefined,
     onStep: (step) => console.error(`  ${step.index}. ${step.description} [${step.outcome}, ${step.durationMs}ms]`),
   });
+
+  console.error(`\n${result.findings.length} finding(s): ${result.findings.map((f) => `[${f.severity}] ${f.title}`).join("; ") || "none"}`);
+  if (result.videoPath) console.error(`video: ${result.videoPath}  (open with: open "${result.videoPath}")`);
 
   const out = arg("out");
   const json = JSON.stringify(result, null, 2);

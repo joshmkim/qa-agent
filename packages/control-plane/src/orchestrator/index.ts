@@ -113,6 +113,7 @@ export class Orchestrator {
         for (const r of waveResults) {
           board.publish(r);
           results.push(r);
+          if (r.videoPath) this.log(`run ${run.id.slice(0, 8)}: agent ${r.agentId} video ${r.videoPath}`);
         }
         // Stream findings so the UI fills in while the fleet is still running.
         const fresh = waveResults.flatMap((r) => r.findings);

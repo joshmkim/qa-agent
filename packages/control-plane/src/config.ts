@@ -27,6 +27,8 @@ export interface OrchestratorEnvConfig {
   headless: boolean;
   /** Per-agent tool-call ceiling. */
   maxSteps: number;
+  /** Record a .webm per agent session. */
+  recordVideo: boolean;
 }
 
 export interface Config {
@@ -103,6 +105,7 @@ function loadOrchestrator(env: NodeJS.ProcessEnv): OrchestratorEnvConfig | undef
       .filter(Boolean),
     headless: env.AGENT_HEADLESS !== "false",
     maxSteps: Math.max(10, intEnv(env, "AGENT_MAX_STEPS", 150)),
+    recordVideo: env.AGENT_RECORD_VIDEO === "true",
   };
 }
 

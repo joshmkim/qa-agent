@@ -24,6 +24,8 @@ export interface RunAgentOptions extends LoopOptions {
   extraTools?: ToolDefinition[];
   /** Headers on every browser request, e.g. a preprod bypass token resolved from credentialsRef. */
   extraHTTPHeaders?: Record<string, string>;
+  /** Record a .webm of the whole session (AGENT_RECORD_VIDEO=true). Path lands on AgentResult.videoPath. */
+  recordVideo?: boolean;
   /** Called once the browser is up, before the loop starts (e.g. to log in). */
   prepare?: (session: BrowserSession) => Promise<void>;
 }
@@ -42,6 +44,7 @@ export async function runAgent(bundle: ContextBundle, opts: RunAgentOptions = {}
     blastRadiusBoundaries: bundle.environment.blastRadiusBoundaries,
     screenshotDir: opts.screenshotDir,
     extraHTTPHeaders: opts.extraHTTPHeaders,
+    recordVideo: opts.recordVideo ?? process.env.AGENT_RECORD_VIDEO === "true",
   };
 
   const session = await BrowserSession.launch(sessionOpts);
@@ -54,14 +57,19 @@ export async function runAgent(bundle: ContextBundle, opts: RunAgentOptions = {}
   const ctx: ToolContext = { session, bundle, state, log };
   const registry = new ToolRegistry(opts.extraTools);
 
+  let result: AgentResult | undefined;
   try {
     if (opts.prepare) await opts.prepare(session);
-    log(`starting as ${bundle.persona.name} (${bundle.persona.disposition}) with ${model.name}, budget ${bundle.budgetSeconds}s`);
+    log(`starting as ${bundle.persona.name} (${bundle.persona.disposition}) with ${model.name}, budget ${bundle.budgetSeconds}s${sessionOpts.recordVideo ? ", recording video" : ""}`);
     const loop = new ExplorationLoop(bundle, model, registry, ctx, { ...opts, log });
-    const result = await loop.run();
+    result = await loop.run();
     log(`finished: ${result.status}, ${result.findings.length} findings, ${result.trace.length} steps, ${result.modelCalls} model calls`);
-    return result;
   } finally {
-    await session.close();
+    const { videoPath } = await session.close();
+    if (result && videoPath) {
+      result.videoPath = videoPath;
+      log(`video: ${videoPath}`);
+    }
   }
+  return result;
 }

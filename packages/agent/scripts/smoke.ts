@@ -9,6 +9,7 @@
  * (invariant violation); clicking "Wishlist" throws an uncaught exception;
  * /admin is inside the blast radius and must be blocked.
  */
+import { stat } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import type { ContextBundle } from "@qa-agent/shared-types";
@@ -199,7 +200,7 @@ async function main() {
     { name: "done", args: { summary: "Covered cart and promo.", untested: [] } },
   ]);
 
-  const result = await runAgent(bundle, { model, headless: true, log: (m) => console.log(`   [agent] ${m}`) });
+  const result = await runAgent(bundle, { model, headless: true, recordVideo: true, log: (m) => console.log(`   [agent] ${m}`) });
   app.close();
 
   const seen = model.seen.join("\n---\n");
@@ -227,6 +228,8 @@ async function main() {
   assert(result.findings.every((f) => f.runId === "run_smoke" && f.agentId === "agent_smoke_1" && f.dedupeKey.length === 24), "finding identity fields set");
   assert(result.trace.some((s) => s.screenshotId), "screenshot step recorded screenshotId");
   assert(/Hard errors since last step/.test(seen), "hard errors surfaced in tool results");
+  const videoSize = result.videoPath ? (await stat(result.videoPath).catch(() => undefined))?.size ?? 0 : 0;
+  assert(result.videoPath?.endsWith(".webm") && videoSize > 10_000, `session video recorded (${result.videoPath}, ${videoSize} bytes)`);
 
   console.log(process.exitCode ? "\nSMOKE FAILED" : "\nSMOKE PASSED");
 }

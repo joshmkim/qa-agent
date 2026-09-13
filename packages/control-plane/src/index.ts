@@ -41,7 +41,7 @@ if (config.orchestrator) {
     events,
     // Swap for the real manifest loader once it exists (see orchestrator/manifest.ts).
     manifest: new FallbackManifestProvider(),
-    runner: new InProcessAgentRunner({ headless: o.headless, maxSteps: o.maxSteps, log: (m) => console.log(m) }),
+    runner: new InProcessAgentRunner({ headless: o.headless, maxSteps: o.maxSteps, recordVideo: o.recordVideo, log: (m) => console.log(m) }),
     config: o,
   }).start();
   console.log(`[orchestrator] enabled; ${o.concurrency} agents in flight, ${o.agentBudgetSeconds}s each, fleet cap ${o.maxFleetSize || "none"}`);

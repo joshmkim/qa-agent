@@ -21,6 +21,8 @@ export interface AgentResult {
   checkedInvariantIds: string[];
   /** Model round trips, useful for cost accounting. */
   modelCalls: number;
+  /** Local path of the session recording (.webm) when video was enabled. */
+  videoPath?: string;
   startedAt: string; // ISO-8601
   finishedAt: string; // ISO-8601
 }
