@@ -10,6 +10,7 @@
   },
   "scripts": {
     "run": "tsx src/cli.ts",
+    "bundle": "tsx scripts/bundle-from-manifest.ts",
     "smoke": "tsx scripts/smoke.ts",
     "install-browsers": "playwright install chromium",
     "build": "tsc --noEmit",
