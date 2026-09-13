@@ -213,7 +213,7 @@ export class ExplorationLoop {
           signature: e.kind === "crash" ? "crash" : e.text,
           stepsFrom: Math.max(0, this.ctx.state.trace.length - 8),
         },
-        [...(shot ? [screenshotEvidence(shot, "Last screenshot before error")] : []), consoleEvidence([e])!],
+        [...(shot ? [screenshotEvidence(shot, "Last screenshot before error", this.ctx.artifactUrl)] : []), consoleEvidence([e])!],
       );
       if (!duplicateOf) filed.push(finding.id);
     }
@@ -231,7 +231,7 @@ export class ExplorationLoop {
           signature: `${f.method} ${endpoint} ${f.status ?? f.failureText}`,
           stepsFrom: Math.max(0, this.ctx.state.trace.length - 8),
         },
-        [...(shot ? [screenshotEvidence(shot, "Last screenshot before error")] : []), networkEvidence([f])!],
+        [...(shot ? [screenshotEvidence(shot, "Last screenshot before error", this.ctx.artifactUrl)] : []), networkEvidence([f])!],
       );
       if (!duplicateOf) filed.push(finding.id);
     }

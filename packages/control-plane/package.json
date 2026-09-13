@@ -9,6 +9,7 @@
     "create-app": "tsx scripts/create-github-app.ts",
     "tunnel": "tsx scripts/tunnel.ts",
     "orchestrator-smoke": "tsx scripts/orchestrator-smoke.ts",
+    "artifacts-smoke": "tsx scripts/artifacts-smoke.ts",
     "manifest:check": "tsx scripts/check-manifest.ts",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "build": "tsc --noEmit",

@@ -200,7 +200,14 @@ async function main() {
     { name: "done", args: { summary: "Covered cart and promo.", untested: [] } },
   ]);
 
-  const result = await runAgent(bundle, { model, headless: true, recordVideo: true, log: (m) => console.log(`   [agent] ${m}`) });
+  const result = await runAgent(bundle, {
+    model,
+    headless: true,
+    recordVideo: true,
+    // What the orchestrator does: map local files to the control-plane's artifact route.
+    artifactUrl: (p) => `http://cp.local/api/artifacts/run_smoke/agent_smoke_1/${p.split("/").pop()}`,
+    log: (m) => console.log(`   [agent] ${m}`),
+  });
   app.close();
 
   const seen = model.seen.join("\n---\n");
@@ -230,6 +237,9 @@ async function main() {
   assert(/Hard errors since last step/.test(seen), "hard errors surfaced in tool results");
   const videoSize = result.videoPath ? (await stat(result.videoPath).catch(() => undefined))?.size ?? 0 : 0;
   assert(result.videoPath?.endsWith(".webm") && videoSize > 10_000, `session video recorded (${result.videoPath}, ${videoSize} bytes)`);
+  const shots = result.findings.flatMap((f) => f.evidence.filter((e) => e.kind === "screenshot"));
+  assert(shots.length > 0 && shots.every((e) => /^http:\/\/cp\.local\/api\/artifacts\/run_smoke\/agent_smoke_1\/shot_\d+\.png$/.test(e.content)), `screenshot evidence carries artifact URLs (${shots[0]?.content})`);
+  assert(result.findings.every((f) => f.evidence.some((e) => e.kind === "video" && /\/api\/artifacts\/.*\.webm$/.test(e.content))), "every finding has the session video as evidence");
 
   console.log(process.exitCode ? "\nSMOKE FAILED" : "\nSMOKE PASSED");
 }

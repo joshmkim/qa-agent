@@ -45,13 +45,17 @@ export interface ActionStep {
   screenshotId?: string;
 }
 
-export type EvidenceKind = "screenshot" | "log" | "network" | "metric" | "db";
+export type EvidenceKind = "screenshot" | "video" | "log" | "network" | "metric" | "db";
 
 export interface Evidence {
   id: string;
   kind: EvidenceKind;
   label: string;
-  /** For screenshots: URL. For logs/network: raw text excerpt. */
+  /**
+   * For screenshots/videos: a URL the web can load (the control-plane's
+   * /api/artifacts route when run by the orchestrator; a local path only in
+   * standalone runs). For logs/network: raw text excerpt.
+   */
   content: string;
   capturedAt: string; // ISO-8601
 }

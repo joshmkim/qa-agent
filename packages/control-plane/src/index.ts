@@ -3,6 +3,7 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Run } from "@qa-agent/shared-types";
 import { apiRoutes } from "./api";
+import { artifactRoutes, createArtifactStore } from "./artifacts";
 import { loadConfig } from "./config";
 import { devRoutes } from "./dev";
 import { EventBus } from "./events";
@@ -37,13 +38,23 @@ if (process.env.DEV_SEED === "true") {
 
 if (config.orchestrator) {
   const o = config.orchestrator;
+  // Screenshots and videos agents write, served back to the web UI.
+  const artifacts = createArtifactStore(o.artifactDir, config.publicUrl);
+  app.route("/api/artifacts", artifactRoutes(o.artifactDir));
   new Orchestrator({
     runs,
     events,
-    runner: new InProcessAgentRunner({ headless: o.headless, maxSteps: o.maxSteps, recordVideo: o.recordVideo, log: (m) => console.log(m) }),
+    runner: new InProcessAgentRunner({
+      headless: o.headless,
+      maxSteps: o.maxSteps,
+      recordVideo: o.recordVideo,
+      artifacts,
+      log: (m) => console.log(m),
+    }),
     config: o,
   }).start();
   console.log(`[orchestrator] enabled; ${o.concurrency} agents in flight, fleet cap ${o.maxFleetSize || "none"}, budget from stage (default ${o.agentBudgetSeconds}s)`);
+  console.log(`[artifacts] ${o.artifactDir} -> ${config.publicUrl}/api/artifacts`);
 } else {
   console.log("[orchestrator] disabled (ANTHROPIC_API_KEY not set); runs stay queued until completed via the API");
 }

@@ -1,4 +1,5 @@
 import type { AgentResult, ContextBundle } from "@qa-agent/shared-types";
+import type { ArtifactStore } from "../artifacts";
 
 /**
  * How the orchestrator executes one agent. In-process today; the same
@@ -16,6 +17,11 @@ export interface InProcessRunnerOptions {
   maxSteps?: number;
   /** Record a .webm per agent; path lands on AgentResult.videoPath. */
   recordVideo?: boolean;
+  /**
+   * Where screenshots/videos go and how they're addressed. Without it,
+   * evidence carries local paths the web can't render.
+   */
+  artifacts?: ArtifactStore;
   log?: (msg: string) => void;
 }
 
@@ -29,11 +35,14 @@ export class InProcessAgentRunner implements AgentRunner {
 
   async run(bundle: ContextBundle): Promise<AgentResult> {
     const { runAgent } = await import("@qa-agent/agent");
+    const { artifacts } = this.opts;
     return runAgent(bundle, {
       headless: this.opts.headless,
       extraHTTPHeaders: this.opts.extraHTTPHeaders,
       maxSteps: this.opts.maxSteps,
       recordVideo: this.opts.recordVideo,
+      screenshotDir: artifacts?.dirFor(bundle.runId, bundle.agentId),
+      artifactUrl: artifacts ? (p) => artifacts.urlFor(bundle.runId, bundle.agentId, p) : undefined,
       log: this.opts.log ? (m) => this.opts.log!(`[agent ${bundle.agentId}] ${m}`) : undefined,
     });
   }
