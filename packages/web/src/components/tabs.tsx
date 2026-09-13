@@ -14,14 +14,14 @@ export interface Tab {
 export function Tabs({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname();
   return (
-    <div className="border-b border-border" role="tablist">
+    <div className="flex items-center gap-6 border-b border-border" role="tablist">
       {tabs.map((t) => {
         const active = t.prefix ? pathname.startsWith(t.href) : pathname === t.href;
         if (t.disabled) {
           return (
             <span
               key={t.href}
-              className="tab-link cursor-not-allowed !text-[#9ba7b6]"
+              className="tab-link cursor-not-allowed !text-text-tertiary"
               title="Coming soon"
               role="tab"
               aria-disabled="true"

@@ -13,9 +13,16 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
+      </head>
       <body className="min-h-screen">
         <TopNav />
-        <main className="mx-auto max-w-[1600px] px-5 py-6">{children}</main>
+        <main className="mx-auto max-w-[1400px] px-10 pt-10 pb-16">{children}</main>
       </body>
     </html>
   );

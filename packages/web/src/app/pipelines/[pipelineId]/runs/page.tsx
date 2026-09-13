@@ -44,7 +44,7 @@ export default async function RunsPage({ params }: { params: Promise<{ pipelineI
               return (
                 <tr key={run.id}>
                   <td>
-                    <Link href={`/pipelines/${pipeline.id}/runs/${run.id}`} className="font-bold">
+                    <Link href={`/pipelines/${pipeline.id}/runs/${run.id}`} className="font-medium">
                       #{run.number}
                     </Link>
                     <div className="mono text-text-secondary mt-0.5">{shortSha(run.change.headSha)}</div>
@@ -56,7 +56,7 @@ export default async function RunsPage({ params }: { params: Promise<{ pipelineI
                   <td>
                     <StatusIndicator tone={verdictTone(run.verdict)}>{verdictLabel(run.verdict)}</StatusIndicator>
                   </td>
-                  <td className="font-bold">{Math.round((run.confidenceScore ?? 0) * 100)}%</td>
+                  <td className="font-medium">{Math.round((run.confidenceScore ?? 0) * 100)}%</td>
                   <td>{percent(run.coverage.changedSurfacesVisited, run.coverage.changedSurfacesTotal)}% changed</td>
                   <td>
                     {run.findings.total === 0 ? (

@@ -1,27 +1,26 @@
 import Link from "next/link";
 import type { Pipeline, Run, Stage } from "@qa-agent/shared-types";
+import { listFindings } from "@/lib/data";
 import {
   Icons,
   Pill,
-  ProgressBar,
   RunStatusIndicator,
+  SeverityBadge,
   SeverityCounts,
   StatusIndicator,
-  StepStatusIndicator,
-  verdictLabel,
   verdictTone,
 } from "@/components/ui";
-import { duration, percent, relativeTime, shortSha } from "@/lib/format";
+import { shortSha } from "@/lib/format";
 
 /* ---------- Source column ---------- */
 
 export function SourceColumn({ pipeline }: { pipeline: Pipeline }) {
   const repo = pipeline.repository;
   return (
-    <div className="awsui-container flex w-[260px] shrink-0 flex-col">
+    <div className="awsui-container flex w-[216px] shrink-0 flex-col">
       <div className="awsui-container-header">
-        <div className="text-text-secondary text-[12px] font-bold uppercase tracking-wide">Source</div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[16px] font-bold">
+        <div className="text-text-secondary text-[12px] font-medium uppercase tracking-wide">Source</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[16px] font-medium">
           <Icons.github />
           {repo.name}
         </div>
@@ -43,39 +42,57 @@ export function SourceColumn({ pipeline }: { pipeline: Pipeline }) {
 
 /* ---------- Stage column ---------- */
 
-export function StageColumn({
+const CONFIDENCE_TEXT_TONE: Record<string, string> = {
+  success: "text-success",
+  error: "text-error",
+  warning: "text-warning",
+  info: "text-info",
+  pending: "text-pending",
+  stopped: "text-pending",
+};
+
+const CONFIDENCE_BAR_TONE: Record<string, string> = {
+  success: "bg-success",
+  error: "bg-error",
+  warning: "bg-warning",
+  info: "bg-info",
+  pending: "bg-pending",
+  stopped: "bg-pending",
+};
+
+export async function StageColumn({
   pipeline,
   stage,
   run,
-  nextStage,
 }: {
   pipeline: Pipeline;
   stage: Stage;
   run?: Run;
-  nextStage?: Stage;
 }) {
   const runHref = run ? `/pipelines/${pipeline.id}/runs/${run.id}` : undefined;
-  const changedPct = run
-    ? percent(run.coverage.changedSurfacesVisited, run.coverage.changedSurfacesTotal)
-    : 0;
-  const isTerminal = run && (run.status === "passed" || run.status === "blocked");
+  const confidencePct = run ? Math.round((run.confidenceScore ?? 0) * 100) : 0;
+  const tone = run ? verdictTone(run.verdict) : "pending";
+  const suspectPr = run?.change.pullRequests[0]?.number;
+  const topFindings = run ? (await listFindings(run.id)).slice(0, 4) : [];
 
   return (
-    <div className="awsui-container flex w-[360px] shrink-0 flex-col">
+    <div className="awsui-container flex w-[336px] shrink-0 flex-col">
       <div className="awsui-container-header">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className="text-text-secondary text-[12px] font-bold uppercase tracking-wide">
-              Stage {stage.order}
-            </div>
-            <div className="mt-0.5 text-[18px] font-bold capitalize leading-6">{stage.name}</div>
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-text-secondary text-[12px] font-medium uppercase tracking-wide">
+            Stage {stage.order}
+          </span>
           {run && <RunStatusIndicator status={run.status} />}
         </div>
-        <div className="mt-1.5 flex flex-wrap items-center gap-2 text-[12px]">
-          <Pill>branch: {stage.branch}</Pill>
+        <div className="mt-1 flex flex-wrap items-baseline gap-3">
+          <span className="text-[22px] font-medium capitalize tracking-tight text-text">{stage.name}</span>
           {stage.environmentUrl && (
-            <a href={stage.environmentUrl} className="inline-flex items-center gap-1" target="_blank" rel="noreferrer">
+            <a
+              href={stage.environmentUrl}
+              className="inline-flex items-center gap-1 text-[14px]"
+              target="_blank"
+              rel="noreferrer"
+            >
               {stage.environmentUrl.replace(/^https?:\/\//, "")}
               <Icons.external />
             </a>
@@ -83,142 +100,98 @@ export function StageColumn({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-3 p-4 text-[13px]">
-        {/* 1. Deployment detected */}
-        <StepRow
-          title="Deployment"
-          status={<StepStatusIndicator status={run ? "succeeded" : "pending"} />}
-        >
-          {stage.cursor ? (
-            <>
-              <span className="mono">{shortSha(stage.cursor.sha)}</span>
-              {stage.cursor.prNumber && (
-                <>
-                  {" "}
-                  · <a href={`${pipeline.repository.url}/pull/${stage.cursor.prNumber}`}>#{stage.cursor.prNumber}</a>
-                </>
-              )}
-              <span className="text-text-secondary"> · {relativeTime(stage.cursor.updatedAt)}</span>
-              {run && (
-                <div className="text-text-secondary mt-0.5">
-                  {run.change.commitCount} commits, {run.change.pullRequests.length} PRs since last cursor
-                </div>
-              )}
-            </>
-          ) : (
-            <span className="text-text-secondary">Waiting for first deployment</span>
-          )}
-        </StepRow>
-
-        {/* 2. Agentic QA */}
-        <StepRow
-          title={
-            run ? (
-              <Link href={runHref!} className="font-bold">
-                Agentic QA · Run #{run.number}
-              </Link>
-            ) : (
-              "Agentic QA"
-            )
-          }
-          status={
-            run ? (
-              isTerminal ? (
-                <StatusIndicator tone="success">Completed</StatusIndicator>
-              ) : (
-                <StepStatusIndicator status="running" />
-              )
-            ) : (
-              <StepStatusIndicator status="pending" />
-            )
-          }
-          emphasized
-        >
+      <div className="border-t border-border p-4">
+        <div className="flex flex-col gap-3 rounded-[8px] border border-border bg-page p-3.5">
           {run ? (
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="inline-flex items-center gap-1.5">
-                  <Icons.agent />
-                  {run.fleet.agentsCompleted}/{run.fleet.agentsRequested} agents
-                  {run.fleet.agentsFailed > 0 && (
-                    <span className="text-text-secondary">({run.fleet.agentsFailed} failed)</span>
-                  )}
-                </span>
-                <span className="text-text-secondary">{duration(run.startedAt, run.finishedAt)}</span>
-              </div>
-              <ProgressBar
-                value={changedPct}
-                tone={changedPct === 100 ? "success" : changedPct >= 80 ? "info" : "warning"}
-                label={
+            <>
+              <div className="flex flex-wrap items-center gap-1.5 text-[14px]">
+                <Link href={runHref!} className="font-medium text-link">
+                  Agentic QA
+                </Link>
+                <span className="text-border-strong">·</span>
+                <span className="mono text-link">{shortSha(run.change.headSha)}</span>
+                {suspectPr && (
                   <>
-                    <span>Changed surfaces covered</span>
-                    <span className="font-bold text-text">
-                      {run.coverage.changedSurfacesVisited}/{run.coverage.changedSurfacesTotal} ({changedPct}%)
-                    </span>
+                    <span className="text-border-strong">·</span>
+                    <span className="text-link">#{suspectPr}</span>
                   </>
-                }
-              />
-              <div className="flex items-center justify-between">
-                <span className="text-text-secondary">Findings</span>
+                )}
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-text-secondary text-[13px]">Agent confidence</span>
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`text-[32px] font-medium leading-none tracking-tight tabular-nums ${CONFIDENCE_TEXT_TONE[tone]}`}
+                  >
+                    {confidencePct}
+                  </span>
+                  <span className={`self-end pb-0.5 text-[14px] ${CONFIDENCE_TEXT_TONE[tone]}`}>%</span>
+                  <span className="ml-1.5 h-[5px] min-w-[40px] flex-1 overflow-hidden rounded-full bg-border">
+                    <span
+                      className={`block h-full ${CONFIDENCE_BAR_TONE[tone]}`}
+                      style={{ width: `${confidencePct}%` }}
+                    />
+                  </span>
+                </div>
+                {run.confidenceStatement && (
+                  <span className="text-text-tertiary text-[12px]">{run.confidenceStatement}</span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-text-secondary text-[13px]">Findings</span>
                 <SeverityCounts counts={run.findings.bySeverity} />
               </div>
-            </div>
+            </>
           ) : (
-            <span className="text-text-secondary">Fleet of {stage.fleetSize} agents will run on next deployment</span>
+            <span className="text-text-secondary text-[13px]">
+              Fleet of {stage.fleetSize} agents will run on next deployment
+            </span>
           )}
-        </StepRow>
-
-        {/* 3. Promotion gate */}
-        {stage.gatesPromotion ? (
-          <StepRow
-            title={
-              <>
-                Promotion gate <span className="text-text-secondary">→ {nextStage?.name ?? stage.protectedBranch}</span>
-              </>
-            }
-            status={
-              run ? (
-                <StatusIndicator tone={verdictTone(run.verdict)}>{verdictLabel(run.verdict)}</StatusIndicator>
-              ) : (
-                <StepStatusIndicator status="pending" />
-              )
-            }
-          >
-            <div className="text-text-secondary">
-              Check run <span className="mono">agentic-qa/{stage.name}</span> on protected branch{" "}
-              <span className="mono">{stage.protectedBranch}</span>
-              {run?.checkRunId && (
-                <>
-                  {" "}
-                  ·{" "}
-                  <a href={`${pipeline.repository.url}/runs/${run.checkRunId}`} target="_blank" rel="noreferrer">
-                    view on GitHub
-                  </a>
-                </>
-              )}
-            </div>
-          </StepRow>
-        ) : (
-          <StepRow title="Promotion gate" status={<StatusIndicator tone="stopped">Not gating</StatusIndicator>}>
-            <span className="text-text-secondary">Monitoring only. Findings are reported, promotion is not blocked.</span>
-          </StepRow>
-        )}
+        </div>
       </div>
 
-      {run?.confidenceStatement && (
-        <div className="border-t border-border bg-[#fafafa] px-4 py-3 text-[13px]">
-          <div className="text-text-secondary mb-1 flex items-center justify-between text-[12px] font-bold uppercase tracking-wide">
-            <span>Confidence</span>
-            <span className="text-text text-[13px] normal-case tracking-normal">
-              {Math.round((run.confidenceScore ?? 0) * 100)}%
-            </span>
+      {topFindings.length > 0 && (
+        <>
+          <div className="border-t border-border" />
+          <div className="flex flex-col gap-1 p-4">
+            <span className="text-text-secondary text-[13px] font-medium">Top findings</span>
+            <div className="divide-y divide-border">
+              {topFindings.map((f) => (
+                <Link
+                  key={f.id}
+                  href={`/pipelines/${pipeline.id}/runs/${run!.id}/findings/${f.id}`}
+                  className="flex items-start gap-3 py-3 hover:no-underline"
+                >
+                  <SeverityBadge severity={f.severity} size="md" />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[15px] font-medium leading-snug text-text">{f.title}</div>
+                    <div className="text-text-secondary mt-0.5 line-clamp-2 text-[13px] leading-snug">{f.summary}</div>
+                    <div className="text-text-tertiary mt-1 text-[12px]">
+                      {f.personaName} · <span className="mono">{f.agentId}</span>
+                    </div>
+                  </div>
+                  <span className="shrink-0 self-center text-text-tertiary">
+                    <Icons.chevronRight />
+                  </span>
+                </Link>
+              ))}
+            </div>
           </div>
-          <p className="line-clamp-3">{run.confidenceStatement}</p>
-          <Link href={runHref!} className="mt-1 inline-flex items-center gap-0.5 font-bold">
+        </>
+      )}
+
+      <div className="mt-auto border-t border-border">
+        {run ? (
+          <Link
+            href={runHref!}
+            className="flex w-full items-center gap-1.5 rounded-b-[12px] px-5 py-3.5 text-[14px] font-medium text-link hover:bg-nav-hover"
+          >
             View run <Icons.chevronRight />
           </Link>
-        </div>
-      )}
+        ) : (
+          <div className="px-5 py-3.5 text-[13px] text-text-tertiary">No run yet</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -229,21 +202,15 @@ function StepRow({
   title,
   status,
   children,
-  emphasized = false,
 }: {
   title: React.ReactNode;
   status: React.ReactNode;
   children: React.ReactNode;
-  emphasized?: boolean;
 }) {
   return (
-    <div
-      className={`rounded-[8px] border p-3 ${
-        emphasized ? "border-[#b5d6f4] bg-info-bg/40" : "border-border bg-white"
-      }`}
-    >
+    <div className="rounded-[8px] border border-border bg-white p-3">
       <div className="flex items-start justify-between gap-2">
-        <div className="font-bold">{title}</div>
+        <div className="font-medium">{title}</div>
         <div className="shrink-0 text-[12px]">{status}</div>
       </div>
       <div className="mt-1.5">{children}</div>

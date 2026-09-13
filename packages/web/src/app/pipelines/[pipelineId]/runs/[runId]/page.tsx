@@ -33,11 +33,11 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
   const tone = verdictTone(run.verdict);
   const bannerCls =
     tone === "error"
-      ? "border-[#f5b0b0] bg-error-bg"
+      ? "border-[#f0cfcc] bg-error-bg"
       : tone === "success"
-        ? "border-[#a6dfab] bg-success-bg"
+        ? "border-[#c9e3d3] bg-success-bg"
         : tone === "warning"
-          ? "border-[#f0dc8a] bg-warning-bg"
+          ? "border-[#e8d6b0] bg-warning-bg"
           : "border-border bg-white";
 
   return (
@@ -49,7 +49,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
           <div className="text-text-secondary text-[13px]">
             <Link href={`/pipelines/${pipeline.id}/runs`}>Runs</Link> / <span className="capitalize">{stage?.name}</span>
           </div>
-          <h2 className="mt-1 flex items-center gap-3 text-[22px] font-bold leading-7">
+          <h2 className="mt-1 flex items-center gap-3 text-[22px] font-medium leading-7">
             Run #{run.number}
             <RunStatusIndicator status={run.status} />
           </h2>
@@ -93,7 +93,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
       </div>
 
       {/* Verdict banner */}
-      <div className={`rounded-[16px] border p-5 ${bannerCls}`}>
+      <div className={`rounded-[12px] border p-5 ${bannerCls}`}>
         <div className="flex flex-wrap items-start justify-between gap-6">
           <div className="max-w-[900px]">
             <div className="text-[16px]">
@@ -107,8 +107,8 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
             <p className="mt-2 text-[16px] leading-6">{run.confidenceStatement}</p>
           </div>
           <div className="text-right">
-            <div className="text-text-secondary text-[12px] font-bold uppercase tracking-wide">Confidence</div>
-            <div className="text-[40px] font-bold leading-[44px]">{Math.round((run.confidenceScore ?? 0) * 100)}%</div>
+            <div className="text-text-secondary text-[12px] font-medium uppercase tracking-wide">Confidence</div>
+            <div className="text-[40px] font-medium leading-[44px]">{Math.round((run.confidenceScore ?? 0) * 100)}%</div>
           </div>
         </div>
       </div>
@@ -123,7 +123,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
               label={
                 <>
                   <span>Changed surfaces</span>
-                  <span className="text-text font-bold">
+                  <span className="text-text font-medium">
                     {run.coverage.changedSurfacesVisited}/{run.coverage.changedSurfacesTotal}
                   </span>
                 </>
@@ -134,7 +134,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
               label={
                 <>
                   <span>All surfaces</span>
-                  <span className="text-text font-bold">
+                  <span className="text-text font-medium">
                     {run.coverage.surfacesVisited}/{run.coverage.surfacesTotal}
                   </span>
                 </>
@@ -146,7 +146,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
               label={
                 <>
                   <span>Invariants checked</span>
-                  <span className="text-text font-bold">
+                  <span className="text-text font-medium">
                     {run.coverage.invariantsChecked}/{run.coverage.invariantsTotal}
                   </span>
                 </>
@@ -158,21 +158,21 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
         <Container title="Fleet">
           <KeyValueGrid columns={2}>
             <KeyValue label="Agents">
-              <span className="text-[20px] font-bold">{run.fleet.agentsCompleted}</span>
+              <span className="text-[20px] font-medium">{run.fleet.agentsCompleted}</span>
               <span className="text-text-secondary"> / {run.fleet.agentsRequested}</span>
             </KeyValue>
             <KeyValue label="Actions taken">
-              <span className="text-[20px] font-bold">{compact(run.fleet.totalActions)}</span>
+              <span className="text-[20px] font-medium">{compact(run.fleet.totalActions)}</span>
             </KeyValue>
           </KeyValueGrid>
           <div className="mt-3">
             <div className="text-text-secondary mb-1 text-[12px]">Dispositions</div>
-            <div className="flex h-2 w-full overflow-hidden rounded-full bg-[#e9ebed]">
+            <div className="flex h-2 w-full overflow-hidden rounded-full bg-border">
               {Object.entries(run.fleet.dispositions).map(([k, v], i) => (
                 <div
                   key={k}
                   title={`${k}: ${v}`}
-                  className={["bg-info", "bg-[#7d2105]", "bg-[#8d6605]", "bg-[#3b8b7e]"][i % 4]}
+                  className={["bg-info", "bg-[#8a2a22]", "bg-warning", "bg-[#4f8f7d]"][i % 4]}
                   style={{ width: `${(v / run.fleet.agentsRequested) * 100}%` }}
                 />
               ))}
@@ -180,7 +180,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[12px] text-text-secondary">
               {Object.entries(run.fleet.dispositions).map(([k, v]) => (
                 <span key={k}>
-                  {k} <span className="text-text font-bold">{v}</span>
+                  {k} <span className="text-text font-medium">{v}</span>
                 </span>
               ))}
             </div>
@@ -188,7 +188,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
         </Container>
 
         <Container title="Findings">
-          <div className="text-[20px] font-bold">
+          <div className="text-[20px] font-medium">
             {run.findings.total}
             <span className="text-text-secondary text-[14px] font-normal"> unique</span>
           </div>
@@ -203,10 +203,10 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
         <Container title="Change">
           <KeyValueGrid columns={2}>
             <KeyValue label="Commits">
-              <span className="text-[20px] font-bold">{run.change.commitCount}</span>
+              <span className="text-[20px] font-medium">{run.change.commitCount}</span>
             </KeyValue>
             <KeyValue label="Files">
-              <span className="text-[20px] font-bold">{run.change.filesChanged}</span>
+              <span className="text-[20px] font-medium">{run.change.filesChanged}</span>
             </KeyValue>
           </KeyValueGrid>
           <div className="mono mt-3">
@@ -226,7 +226,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
               <div className="text-[12px]">
                 <StepStatusIndicator status={step.status} />
               </div>
-              <div className="mt-1 font-bold">{step.name}</div>
+              <div className="mt-1 font-medium">{step.name}</div>
               <div className="text-text-secondary mt-0.5 text-[12px]">
                 {step.startedAt && step.finishedAt ? duration(step.startedAt, step.finishedAt) : "—"}
                 {step.detail && <> · {step.detail}</>}
@@ -271,12 +271,12 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
               {run.change.pullRequests.map((pr) => (
                 <tr key={pr.number}>
                   <td>
-                    <a href={pr.url} className="mono font-bold" target="_blank" rel="noreferrer">
+                    <a href={pr.url} className="mono font-medium" target="_blank" rel="noreferrer">
                       #{pr.number}
                     </a>
                   </td>
                   <td className="max-w-[520px]">
-                    <div className="font-bold">{pr.title}</div>
+                    <div className="font-medium">{pr.title}</div>
                     <div className="text-text-secondary mt-0.5 line-clamp-2 text-[13px]">{pr.body}</div>
                     {pr.linkedIssues.length > 0 && (
                       <div className="text-text-secondary mt-0.5 text-[12px]">Closes {pr.linkedIssues.join(", ")}</div>

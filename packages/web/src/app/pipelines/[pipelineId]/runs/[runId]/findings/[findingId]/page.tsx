@@ -43,7 +43,7 @@ export default async function FindingPage({
             <Link href={`/pipelines/${pipeline.id}/runs/${run.id}`}>Run #{run.number}</Link> /{" "}
             <span className="mono">{finding.id}</span>
           </div>
-          <h2 className="mt-1 flex items-start gap-3 text-[22px] font-bold leading-7">
+          <h2 className="mt-1 flex items-start gap-3 text-[22px] font-medium leading-7">
             <span className="mt-1">
               <SeverityBadge severity={finding.severity} />
             </span>
@@ -91,9 +91,9 @@ export default async function FindingPage({
           <Container title="Summary">
             <p className="text-[15px] leading-6">{finding.summary}</p>
             {invariant && (
-              <div className="mt-4 rounded-[8px] border border-[#f0dc8a] bg-warning-bg p-3">
-                <div className="text-warning text-[12px] font-bold uppercase tracking-wide">Invariant violated</div>
-                <div className="mt-1 font-bold">{invariant.statement}</div>
+              <div className="mt-4 rounded-[8px] border border-[#e8d6b0] bg-warning-bg p-3">
+                <div className="text-warning text-[12px] font-medium uppercase tracking-wide">Invariant violated</div>
+                <div className="mt-1 font-medium">{invariant.statement}</div>
                 {invariant.check && (
                   <div className="mt-1">
                     <Code>{invariant.check}</Code>
@@ -126,7 +126,7 @@ export default async function FindingPage({
               <KeyValue label="Surface">
                 {surface ? (
                   <>
-                    <div className="font-bold">{surface.name}</div>
+                    <div className="font-medium">{surface.name}</div>
                     <div className="text-text-secondary text-[12px]">
                       {surface.kind} · <span className="mono">{surface.locator}</span>
                     </div>
@@ -147,7 +147,7 @@ export default async function FindingPage({
                 <span className="mono break-all">{finding.dedupeKey}</span>
               </KeyValue>
               <KeyValue label="Duplicate reports">
-                <span className="font-bold">{finding.triage?.duplicateCount ?? 0}</span> other agents
+                <span className="font-medium">{finding.triage?.duplicateCount ?? 0}</span> other agents
               </KeyValue>
             </KeyValueGrid>
           </Container>
@@ -211,11 +211,11 @@ function ActionStepRow({ step }: { step: ActionStep }) {
   const argEntries = Object.entries(step.args);
   return (
     <li className="flex gap-4 px-5 py-3">
-      <div className="text-text-secondary w-6 shrink-0 pt-0.5 text-right text-[13px] font-bold">{step.index}</div>
+      <div className="text-text-secondary w-6 shrink-0 pt-0.5 text-right text-[13px] font-medium">{step.index}</div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <Pill tone="neutral">{step.kind}</Pill>
-          <span className="font-bold">{step.description}</span>
+          <span className="font-medium">{step.description}</span>
         </div>
         {argEntries.length > 0 && (
           <div className="mt-1 flex flex-wrap gap-1.5">
@@ -243,16 +243,16 @@ function EvidenceRow({ evidence }: { evidence: Evidence }) {
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Pill tone={kindTone}>{evidence.kind}</Pill>
-          <span className="font-bold text-[13px]">{evidence.label}</span>
+          <span className="font-medium text-[13px]">{evidence.label}</span>
         </div>
         <span className="text-text-secondary whitespace-nowrap text-[12px]">{formatDateTime(evidence.capturedAt)}</span>
       </div>
       {evidence.kind === "screenshot" ? (
-        <div className="mt-2 flex h-[140px] items-center justify-center rounded-[8px] border border-dashed border-border-strong bg-[#f8f9fa] text-text-secondary text-[12px]">
+        <div className="mt-2 flex h-[140px] items-center justify-center rounded-[8px] border border-dashed border-border-strong bg-[#f7f7f5] text-text-secondary text-[12px]">
           Screenshot placeholder · <span className="mono ml-1">{evidence.content}</span>
         </div>
       ) : (
-        <pre className="mono mt-2 overflow-x-auto whitespace-pre-wrap rounded-[8px] border border-border bg-[#f8f9fa] p-3 text-[12px] leading-[18px]">
+        <pre className="mono mt-2 overflow-x-auto whitespace-pre-wrap rounded-[8px] border border-border bg-[#f7f7f5] p-3 text-[12px] leading-[18px]">
           {evidence.content}
         </pre>
       )}
