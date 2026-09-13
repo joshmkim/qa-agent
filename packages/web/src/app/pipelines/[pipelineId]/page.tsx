@@ -31,7 +31,7 @@ export default async function PipelinePage({ params }: { params: Promise<{ pipel
     <div className="space-y-5">
       <AutoRefresh active={active} />
       {blocked > 0 && (
-        <div className="flex items-start gap-3 rounded-[8px] border border-[#f5b0b0] bg-error-bg px-4 py-3">
+        <div className="flex items-start gap-3 rounded-[8px] border border-[#f0cfcc] bg-error-bg px-4 py-3">
           <StatusIndicator tone="error">Promotion blocked</StatusIndicator>
           <span>
             {blocked} stage{blocked > 1 ? "s have" : " has"} a failing QA gate. Fix or override the P0 findings to let
@@ -79,7 +79,7 @@ export default async function PipelinePage({ params }: { params: Promise<{ pipel
               return (
                 <tr key={run.id}>
                   <td>
-                    <Link href={`/pipelines/${pipeline.id}/runs/${run.id}`} className="font-bold">
+                    <Link href={`/pipelines/${pipeline.id}/runs/${run.id}`} className="font-medium">
                       #{run.number}
                     </Link>
                   </td>

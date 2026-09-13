@@ -1,44 +1,46 @@
 @import "tailwindcss";
 
-/* Cloudscape "visual refresh" inspired tokens so the UI reads like Amazon Pipelines. */
+/* Design tokens shared with the Claude Design "Pipeline" canvas — a warm,
+   flat, Geist-based system replacing the earlier Cloudscape look. */
 @theme {
-  --font-sans: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
-  --font-mono: "Amazon Ember Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
-  --color-nav: #232f3e;
-  --color-nav-hover: #2f3e52;
-  --color-page: #f2f3f3;
+  --color-nav: #ffffff;
+  --color-nav-hover: #f7f7f5;
+  --color-page: #fcfcfb;
   --color-surface: #ffffff;
-  --color-border: #e9ebed;
-  --color-border-strong: #8c8c94;
-  --color-divider: #e9ebed;
+  --color-border: #e4e4e0;
+  --color-border-strong: #c9c9c3;
+  --color-divider: #e4e4e0;
 
-  --color-text: #000716;
-  --color-text-secondary: #5f6b7a;
+  --color-text: #1b1a17;
+  --color-text-secondary: #75746f;
+  --color-text-tertiary: #9a9a93;
   --color-text-inverted: #ffffff;
 
-  --color-link: #0972d3;
-  --color-link-hover: #033160;
+  --color-link: #3a6ea8;
+  --color-link-hover: #2f5c8c;
 
-  --color-success: #037f0c;
-  --color-success-bg: #f2fcf3;
-  --color-error: #d91515;
-  --color-error-bg: #fff7f7;
-  --color-warning: #8d6605;
-  --color-warning-bg: #fffce9;
-  --color-info: #0972d3;
-  --color-info-bg: #f2f8fd;
-  --color-pending: #5f6b7a;
-  --color-pending-bg: #f4f4f4;
+  --color-success: #2f7a4f;
+  --color-success-bg: #eaf4ee;
+  --color-error: #c0362b;
+  --color-error-bg: #fbeceb;
+  --color-warning: #96681a;
+  --color-warning-bg: #f7f0e2;
+  --color-info: #3a6ea8;
+  --color-info-bg: #eaf1f7;
+  --color-pending: #75746f;
+  --color-pending-bg: #f2f2ef;
 
-  --color-sev-p0: #d91515;
-  --color-sev-p1: #ff5d00;
-  --color-sev-p2: #8d6605;
-  --color-sev-p3: #5f6b7a;
+  --color-sev-p0: #c0362b;
+  --color-sev-p1: #96681a;
+  --color-sev-p2: #7a6a5a;
+  --color-sev-p3: #75746f;
 
-  --radius-container: 16px;
-  --radius-control: 8px;
-  --radius-pill: 20px;
+  --radius-container: 12px;
+  --radius-control: 6px;
+  --radius-pill: 999px;
 }
 
 html,
@@ -63,13 +65,12 @@ a:hover {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-container);
-  box-shadow: 0 1px 1px 0 rgba(0, 7, 22, 0.05), 0 1px 4px 0 rgba(0, 7, 22, 0.08);
 }
 
 .awsui-container-header {
-  padding: 12px 20px;
+  padding: 16px 20px;
   border-bottom: 1px solid var(--color-divider);
-  background: #fafafa;
+  background: var(--color-surface);
   border-radius: var(--radius-container) var(--radius-container) 0 0;
 }
 
@@ -77,12 +78,13 @@ a:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 20px;
-  border-radius: var(--radius-pill);
-  font-weight: 700;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--radius-control);
+  font-weight: 500;
   font-size: 14px;
-  line-height: 20px;
-  border: 2px solid transparent;
+  letter-spacing: -0.006em;
+  border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
   white-space: nowrap;
@@ -91,54 +93,53 @@ a:hover {
   text-decoration: none;
 }
 .btn-primary {
-  background: var(--color-link);
+  background: #1b1a17;
   color: var(--color-text-inverted);
-  border-color: var(--color-link);
+  border-color: transparent;
 }
 .btn-primary:hover {
-  background: var(--color-link-hover);
-  border-color: var(--color-link-hover);
-  color: var(--color-text-inverted);
+  background: #34332e;
 }
 .btn-normal {
   background: var(--color-surface);
-  color: var(--color-link);
-  border-color: var(--color-link);
+  color: #34332e;
+  border-color: #d4d4ce;
 }
 .btn-normal:hover {
-  background: var(--color-info-bg);
-  color: var(--color-link-hover);
-  border-color: var(--color-link-hover);
+  background: #f7f7f5;
 }
 .btn-disabled,
 .btn:disabled {
   background: var(--color-surface);
-  color: #9ba7b6;
-  border-color: #9ba7b6;
+  color: var(--color-text-tertiary);
+  border-color: var(--color-border);
   cursor: not-allowed;
 }
 
 .tab-link {
-  display: inline-block;
-  padding: 10px 20px;
-  font-weight: 700;
-  color: var(--color-link);
-  border-bottom: 4px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  padding-bottom: 10px;
   margin-bottom: -1px;
+  font-weight: 500;
+  font-size: 14px;
+  letter-spacing: -0.006em;
+  color: var(--color-text-secondary);
+  border-bottom: 2px solid transparent;
 }
 .tab-link:hover {
-  color: var(--color-link-hover);
+  color: var(--color-text);
   text-decoration: none;
 }
 .tab-link[data-active="true"] {
   color: var(--color-text);
-  border-bottom-color: var(--color-link);
+  border-bottom-color: var(--color-text);
 }
 
 .kv-label {
   color: var(--color-text-secondary);
-  font-size: 14px;
-  line-height: 20px;
+  font-size: 13px;
+  line-height: 18px;
 }
 
 .mono {
@@ -190,11 +191,14 @@ table.awsui-table {
 }
 table.awsui-table th {
   text-align: left;
-  font-weight: 700;
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
   color: var(--color-text-secondary);
-  padding: 8px 20px;
+  padding: 10px 20px;
   border-bottom: 1px solid var(--color-divider);
-  background: #fafafa;
+  background: var(--color-surface);
   white-space: nowrap;
 }
 table.awsui-table td {
@@ -206,5 +210,5 @@ table.awsui-table tr:last-child td {
   border-bottom: none;
 }
 table.awsui-table tbody tr:hover td {
-  background: #f8f9fa;
+  background: var(--color-pending-bg);
 }

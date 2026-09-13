@@ -65,7 +65,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
               .map((s) => (
                 <tr key={s.id}>
                   <td className="text-text-secondary">{s.order}</td>
-                  <td className="font-bold capitalize">{s.name}</td>
+                  <td className="font-medium capitalize">{s.name}</td>
                   <td>
                     <Code>{s.branch}</Code>
                   </td>

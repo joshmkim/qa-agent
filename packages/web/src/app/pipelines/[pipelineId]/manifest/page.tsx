@@ -33,7 +33,7 @@ export default async function ManifestPage({ params }: { params: Promise<{ pipel
         <p className="max-w-[900px]">{product.intent}</p>
         {product.boundaries && product.boundaries.length > 0 && (
           <div className="mt-4">
-            <div className="text-[12px] font-bold uppercase tracking-wide text-text-secondary">Boundaries</div>
+            <div className="text-[12px] font-medium uppercase tracking-wide text-text-secondary">Boundaries</div>
             <ul className="mt-1 list-disc space-y-1 pl-5">
               {product.boundaries.map((b) => (
                 <li key={b}>{b}</li>
@@ -93,7 +93,7 @@ export default async function ManifestPage({ params }: { params: Promise<{ pipel
             {product.surfaces.map((s) => (
               <tr key={s.id}>
                 <td>
-                  <div className="font-bold">{s.name}</div>
+                  <div className="font-medium">{s.name}</div>
                   <div className="mono text-[12px] text-text-secondary">{s.id}</div>
                 </td>
                 <td>

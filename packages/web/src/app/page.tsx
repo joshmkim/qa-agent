@@ -42,7 +42,7 @@ export default async function HomePage() {
             {rows.map(({ pipeline, latest }) => (
               <tr key={pipeline.id}>
                 <td>
-                  <Link href={`/pipelines/${pipeline.id}`} className="font-bold">
+                  <Link href={`/pipelines/${pipeline.id}`} className="font-medium">
                     {pipeline.name}
                   </Link>
                 </td>

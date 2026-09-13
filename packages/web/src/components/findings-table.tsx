@@ -59,7 +59,7 @@ export function FindingsTable({
                 <SeverityBadge severity={f.severity} />
               </td>
               <td className="max-w-[560px]">
-                <Link href={`/pipelines/${pipelineId}/runs/${f.runId}/findings/${f.id}`} className="font-bold">
+                <Link href={`/pipelines/${pipelineId}/runs/${f.runId}/findings/${f.id}`} className="font-medium">
                   {f.title}
                 </Link>
                 <div className="text-text-secondary mt-0.5 line-clamp-2 text-[13px]">{f.summary}</div>

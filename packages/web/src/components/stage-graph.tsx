@@ -18,10 +18,10 @@ import { duration, percent, relativeTime, shortSha } from "@/lib/format";
 export function SourceColumn({ pipeline }: { pipeline: Pipeline }) {
   const repo = pipeline.repository;
   return (
-    <div className="awsui-container flex w-[260px] shrink-0 flex-col">
+    <div className="awsui-container flex w-[216px] shrink-0 flex-col">
       <div className="awsui-container-header">
-        <div className="text-text-secondary text-[12px] font-bold uppercase tracking-wide">Source</div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-[16px] font-bold">
+        <div className="text-text-secondary text-[12px] font-medium uppercase tracking-wide">Source</div>
+        <div className="mt-0.5 flex items-center gap-1.5 text-[16px] font-medium">
           <Icons.github />
           {repo.name}
         </div>
@@ -61,14 +61,14 @@ export function StageColumn({
   const isTerminal = run && (run.status === "passed" || run.status === "blocked");
 
   return (
-    <div className="awsui-container flex w-[360px] shrink-0 flex-col">
+    <div className="awsui-container flex w-[336px] shrink-0 flex-col">
       <div className="awsui-container-header">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="text-text-secondary text-[12px] font-bold uppercase tracking-wide">
+            <div className="text-text-secondary text-[12px] font-medium uppercase tracking-wide">
               Stage {stage.order}
             </div>
-            <div className="mt-0.5 text-[18px] font-bold capitalize leading-6">{stage.name}</div>
+            <div className="mt-0.5 text-[18px] font-medium capitalize leading-6">{stage.name}</div>
           </div>
           {run && <RunStatusIndicator status={run.status} />}
         </div>
@@ -114,7 +114,7 @@ export function StageColumn({
         <StepRow
           title={
             run ? (
-              <Link href={runHref!} className="font-bold">
+              <Link href={runHref!} className="font-medium">
                 Agentic QA · Run #{run.number}
               </Link>
             ) : (
@@ -152,7 +152,7 @@ export function StageColumn({
                 label={
                   <>
                     <span>Changed surfaces covered</span>
-                    <span className="font-bold text-text">
+                    <span className="font-medium text-text">
                       {run.coverage.changedSurfacesVisited}/{run.coverage.changedSurfacesTotal} ({changedPct}%)
                     </span>
                   </>
@@ -206,15 +206,15 @@ export function StageColumn({
       </div>
 
       {run?.confidenceStatement && (
-        <div className="border-t border-border bg-[#fafafa] px-4 py-3 text-[13px]">
-          <div className="text-text-secondary mb-1 flex items-center justify-between text-[12px] font-bold uppercase tracking-wide">
+        <div className="border-t border-border bg-surface px-4 py-3 text-[13px]">
+          <div className="text-text-secondary mb-1 flex items-center justify-between text-[12px] font-medium uppercase tracking-wide">
             <span>Confidence</span>
             <span className="text-text text-[13px] normal-case tracking-normal">
               {Math.round((run.confidenceScore ?? 0) * 100)}%
             </span>
           </div>
           <p className="line-clamp-3">{run.confidenceStatement}</p>
-          <Link href={runHref!} className="mt-1 inline-flex items-center gap-0.5 font-bold">
+          <Link href={runHref!} className="mt-1 inline-flex items-center gap-0.5 font-medium">
             View run <Icons.chevronRight />
           </Link>
         </div>
@@ -239,11 +239,11 @@ function StepRow({
   return (
     <div
       className={`rounded-[8px] border p-3 ${
-        emphasized ? "border-[#b5d6f4] bg-info-bg/40" : "border-border bg-white"
+        emphasized ? "border-[#c7dced] bg-info-bg/40" : "border-border bg-white"
       }`}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="font-bold">{title}</div>
+        <div className="font-medium">{title}</div>
         <div className="shrink-0 text-[12px]">{status}</div>
       </div>
       <div className="mt-1.5">{children}</div>

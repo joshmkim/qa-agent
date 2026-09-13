@@ -24,7 +24,7 @@ export function Container({
       {title !== undefined && (
         <header className="awsui-container-header flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-[18px] font-bold leading-6">{title}</h2>
+            <h2 className="text-[18px] font-medium leading-6">{title}</h2>
             {description && (
               <p className="text-text-secondary mt-0.5 text-[14px]">{description}</p>
             )}
@@ -51,7 +51,7 @@ export function PageHeader({
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="min-w-0">
-        <h1 className="text-[28px] font-bold leading-9 tracking-tight">{title}</h1>
+        <h1 className="text-[28px] font-medium leading-9 tracking-tight">{title}</h1>
         {subtitle && <div className="text-text-secondary mt-1">{subtitle}</div>}
         {meta && <div className="mt-2 flex flex-wrap items-center gap-3">{meta}</div>}
       </div>
@@ -122,14 +122,14 @@ export function Pill({
 }) {
   const tones: Record<string, string> = {
     neutral: "bg-pending-bg text-text-secondary border-border",
-    info: "bg-info-bg text-info border-[#b5d6f4]",
-    success: "bg-success-bg text-success border-[#a6dfab]",
-    error: "bg-error-bg text-error border-[#f5b0b0]",
-    warning: "bg-warning-bg text-warning border-[#f0dc8a]",
+    info: "bg-info-bg text-info border-[#c7dced]",
+    success: "bg-success-bg text-success border-[#c9e3d3]",
+    error: "bg-error-bg text-error border-[#f0cfcc]",
+    warning: "bg-warning-bg text-warning border-[#e8d6b0]",
   };
   return (
     <span
-      className={`inline-flex items-center rounded-[4px] border px-1.5 py-0 text-[12px] font-bold leading-[18px] ${tones[tone]}`}
+      className={`inline-flex items-center rounded-[6px] border px-1.5 py-0 text-[12px] font-medium leading-[18px] ${tones[tone]}`}
     >
       {children}
     </span>
@@ -138,7 +138,7 @@ export function Pill({
 
 export function Code({ children }: { children: ReactNode }) {
   return (
-    <code className="mono rounded-[4px] border border-border bg-[#f8f9fa] px-1 py-0.5">
+    <code className="mono rounded-[6px] border border-border bg-[#f7f7f5] px-1 py-0.5">
       {children}
     </code>
   );
@@ -249,7 +249,7 @@ const toneText: Record<Tone, string> = {
 export function StatusIndicator({ tone, children }: { tone: Tone; children: ReactNode }) {
   const Icon = toneIcon[tone];
   return (
-    <span className={`inline-flex items-center gap-1.5 font-bold ${toneText[tone]}`}>
+    <span className={`inline-flex items-center gap-1.5 font-medium ${toneText[tone]}`}>
       <Icon />
       <span>{children}</span>
     </span>
@@ -334,7 +334,7 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   };
   return (
     <span
-      className={`inline-flex min-w-[30px] items-center justify-center rounded-[4px] px-1.5 text-[12px] font-bold leading-[18px] ${cls[severity]}`}
+      className={`inline-flex min-w-[30px] items-center justify-center rounded-[4px] px-1.5 text-[12px] font-medium leading-[18px] ${cls[severity]}`}
     >
       {severity}
     </span>
@@ -355,7 +355,7 @@ export function SeverityCounts({
         compact && counts[s] === 0 ? null : (
           <span key={s} className="inline-flex items-center gap-1">
             <SeverityBadge severity={s} />
-            <span className={counts[s] === 0 ? "text-text-secondary" : "font-bold"}>{counts[s]}</span>
+            <span className={counts[s] === 0 ? "text-text-secondary" : "font-medium"}>{counts[s]}</span>
           </span>
         ),
       )}
@@ -378,12 +378,12 @@ export function ProgressBar({
     info: "bg-info",
     success: "bg-success",
     error: "bg-error",
-    warning: "bg-[#e0a800]",
+    warning: "bg-warning",
   };
   return (
     <div>
       {label && <div className="mb-1 flex justify-between text-[12px] text-text-secondary">{label}</div>}
-      <div className="h-2 w-full overflow-hidden rounded-full bg-[#e9ebed]">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-border">
         <div className={`h-full rounded-full ${bar[tone]}`} style={{ width: `${Math.min(100, value)}%` }} />
       </div>
     </div>
