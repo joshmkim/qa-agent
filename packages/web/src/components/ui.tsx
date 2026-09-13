@@ -325,17 +325,25 @@ export function StepStatusIndicator({ status }: { status: RunStep["status"] }) {
 
 /* ---------- Severity ---------- */
 
-export function SeverityBadge({ severity }: { severity: Severity }) {
+export function SeverityBadge({
+  severity,
+  size = "sm",
+}: {
+  severity: Severity;
+  size?: "sm" | "md";
+}) {
   const cls: Record<Severity, string> = {
-    P0: "bg-sev-p0 text-white",
-    P1: "bg-sev-p1 text-white",
-    P2: "bg-sev-p2 text-white",
-    P3: "bg-sev-p3 text-white",
+    P0: "bg-error-bg text-error",
+    P1: "bg-warning-bg text-warning",
+    P2: "bg-[#f1ede9] text-[#7a6a5a]",
+    P3: "bg-pending-bg text-pending",
   };
+  const sizeCls =
+    size === "md"
+      ? "min-w-[38px] rounded-[8px] px-2.5 py-1 text-[13px] leading-[18px]"
+      : "min-w-[30px] rounded-[6px] px-1.5 text-[12px] leading-[18px]";
   return (
-    <span
-      className={`inline-flex min-w-[30px] items-center justify-center rounded-[4px] px-1.5 text-[12px] font-medium leading-[18px] ${cls[severity]}`}
-    >
+    <span className={`inline-flex items-center justify-center font-medium ${sizeCls} ${cls[severity]}`}>
       {severity}
     </span>
   );
