@@ -93,7 +93,9 @@ export interface Run {
   confidenceStatement?: string;
   /** 0..1 */
   confidenceScore?: number;
-  trigger: "push-webhook" | "api" | "manual";
+  trigger: "push-webhook" | "api" | "manual" | "rerun";
+  /** Set on re-runs: the run whose change window this run repeats. */
+  rerunOf?: string;
   triggeredBy?: string;
   change: ChangeContext;
   steps: RunStep[];

@@ -75,6 +75,34 @@ function durationLabel(run: Run): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
+/**
+ * Posted when a deployment's change context could not be assembled (bad
+ * cursor SHA, revoked install). No fleet ran and no run report follows; the
+ * next push retries from the same base.
+ */
+export function deploymentFailedMessage(input: {
+  repository: Repository;
+  stage: Stage;
+  headSha: string;
+  reason: string;
+  runUrl: string;
+}): SlackMessage {
+  const { repository, stage, headSha, reason, runUrl } = input;
+  const title = `Couldn't assemble context for ${short(headSha)}: ${repository.fullName} → ${stage.name}`;
+  return {
+    text: title,
+    blocks: [
+      header(`⚠️ ${title}`),
+      section(
+        `No fleet ran for <${repository.url}/commit/${headSha}|\`${short(headSha)}\`> on \`${stage.branch}\`. ` +
+          "The deploy cursor was not advanced, so the next push retries from the same base.\n" +
+          `\`\`\`${escape(reason)}\`\`\``,
+      ),
+      context(`<${runUrl}|view run>`),
+    ],
+  };
+}
+
 /** Posted to the channel when the fleet finishes (verdict or infra failure). */
 export function runReportMessage(input: {
   repository: Repository;

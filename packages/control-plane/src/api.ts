@@ -187,6 +187,12 @@ export function apiRoutes(deps: ApiDeps): Hono {
     return finding ? c.json(finding) : c.json({ error: "finding-not-found" }, 404);
   });
 
+  /** Re-run a finished run at the same head SHA. Body: { triggeredBy? }. */
+  app.post("/runs/:id/rerun", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as { triggeredBy?: string };
+    return c.json(await runs.rerun(c.req.param("id"), body.triggeredBy ?? "api"), 201);
+  });
+
   /** Orchestrator reports the triage verdict. Body: CompleteRunInput (findings optional). */
   app.post("/runs/:id/complete", async (c) => {
     const body = (await c.req.json()) as CompleteRunInput;

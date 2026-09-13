@@ -37,6 +37,7 @@ POST /api/runs                                          CI trigger { repository,
 GET  /api/runs/:id
 POST /api/runs/:id/complete                             orchestrator verdict (CompleteRunInput; findings optional)
 POST /api/runs/:id/fail                                 orchestrator infra failure
+POST /api/runs/:id/rerun                                same head SHA, cursor untouched
 GET  /api/pipelines                                     Pipeline[] (view-model, id == repository id)
 GET  /api/pipelines/:id
 GET  /api/pipelines/:id/runs?stage=&limit=              newest first
@@ -191,7 +192,7 @@ Wire in this order; each is a Next route handler calling the control-plane.
 |-----------------------------|---------------------------------------------|-------|
 | Trigger run (pipeline)      | `POST /api/runs` (exists)                   | Needs a stage picker modal. |
 | Override gate (run)         | `POST /api/runs/:id/complete` with `verdict: "override"` + reason | Should also update the GitHub check run conclusion to `neutral` and record who overrode it (`Run.overriddenBy`, new field). |
-| Re-run (run)                | `POST /api/runs` with `sha = run.change.headSha` | Do not advance the cursor for a re-run. Add `trigger: "rerun"` to `Run.trigger`. |
+| Re-run (run)                | `POST /api/runs/:id/rerun` (exists)         | Keeps the cursor; `trigger: "rerun"`, `rerunOf` set. Just needs the button wired. |
 | Dismiss (finding)           | `PATCH /api/findings/:id { status: "dismissed", note }` | New endpoint. |
 | Replay repro (finding)      | `POST /api/findings/:id/replay`             | Spawns one agent with the `reproSteps` trace; returns a new run or a `ReplayResult`. Depends on the agent runtime. |
 | Emit regression test        | `POST /api/findings/:id/regression-test`    | Generates a Playwright spec from `reproSteps`; returns file content or opens a PR. Later. |

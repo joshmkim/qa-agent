@@ -13,6 +13,14 @@ export interface PullRequestRef {
   deletions: number;
 }
 
+/** One file in the compare window. */
+export interface ChangedFile {
+  path: string;
+  status: "added" | "removed" | "modified" | "renamed" | "copied" | "changed" | "unchanged";
+  additions: number;
+  deletions: number;
+}
+
 /** Diff between last deployed cursor and current head, enriched with PRs. */
 export interface ChangeContext {
   baseSha: string;
@@ -20,8 +28,15 @@ export interface ChangeContext {
   commitCount: number;
   filesChanged: number;
   pullRequests: PullRequestRef[];
-  /** Compare API status; "diverged" means we fell back to merge base. */
-  compareStatus: "ahead" | "behind" | "identical" | "diverged";
+  /**
+   * Compare API status; "diverged" means we fell back to merge base.
+   * "unavailable" means the compare failed and the run never got a diff.
+   */
+  compareStatus: "ahead" | "behind" | "identical" | "diverged" | "unavailable";
+  /** Files from the compare, used to mark surfaces touched by the change. */
+  changedFiles?: ChangedFile[];
+  /** True when GitHub capped the compare file list (300 files). */
+  filesTruncated?: boolean;
 }
 
 export type SurfaceKind = "page" | "form" | "button" | "endpoint" | "flow";

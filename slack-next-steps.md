@@ -4,7 +4,8 @@ State as of 2026-09-13: the MVP Slack integration in
 `packages/control-plane/src/slack/` is outbound only. It subscribes to
 `run.finished` and posts one report per run (verdict, confidence statement,
 findings by severity, coverage, fleet, PRs under test, links to the web UI;
-or a failure report for infra errors). It typechecks and passed a smoke test
+or a failure report for infra errors), and to `deployment.failed` for a short
+notice when a deployment could not be assessed. It typechecks and passed a smoke test
 through the real `RunService.completeRun` / `failRun` path.
 
 Because nothing inbound exists, Slack never calls the control plane, so no
@@ -33,15 +34,16 @@ removed code is in git history if we want to restore it rather than rewrite.
       sample body and check the report lands in the channel. Check the
       four-field section renders acceptably on mobile.
 
-## 2. Close the "missed deployment" gap
+## 2. Close the "missed deployment" gap (done)
 
-The compare runs before the cursor advances, so a failed compare leaves the
-cursor untouched and produces no run; the only signal is a log line.
+A failed compare leaves the cursor untouched, records a failed run, and posts
+an `action_required` check (see `git-hub-next-steps.md` §2).
 
-- [ ] Add a `deployment.failed` event (repository, stage, headSha, reason).
-- [ ] Emit it from the push handler when `computeChange` throws.
-- [ ] Notifier posts a short notice so the team knows a deployment was
-      skipped and will be picked up on the next push.
+- [x] `deployment.failed` event (repository, stage, headSha, reason, run).
+- [x] Emitted from `RunService.detectDeployment` when `computeChange` throws.
+- [x] Notifier posts a short notice ("Couldn't assemble context for
+      `abc1234`…") with a link to the failed run. Outbound, so still no
+      public URL.
 
 ## 3. Richer reports
 
@@ -76,8 +78,9 @@ Restore from git history or rebuild:
 
 - [ ] "Override and promote" on blocked runs -> verdict `override`, check run
       neutral. Needs the authorization story first.
-- [ ] "Re-run" on finished runs. Requires relaxing the cursor CAS for a
-      re-run at the same head.
+- [ ] "Re-run" on finished runs. The backend exists
+      (`POST /api/runs/:id/rerun`, same head SHA, cursor untouched); only the
+      inbound Slack button is missing.
 
 ## 6. Multi-tenant Slack (required before customers can install it)
 
