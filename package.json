@@ -6,7 +6,10 @@
     "dev": "pnpm --filter @qa-agent/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down"
   },
   "engines": {
     "node": ">=18.18.0"

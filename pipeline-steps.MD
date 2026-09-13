@@ -5,7 +5,7 @@ done (see checkboxes). The web reads from the control-plane when
 `CONTROL_PLANE_URL` is set and from fixtures otherwise, through
 `packages/web/src/lib/data.ts`. The control-plane
 (`packages/control-plane`) has a GitHub App, webhook handling, run lifecycle,
-an in-memory store, and a Hono JSON API. This doc is the plan for wiring the
+a Postgres store (in-memory when `DATABASE_URL` is unset), and a Hono JSON API. This doc is the plan for wiring the
 two together, in the order that keeps the UI demoable at every step.
 
 ## Where the seam is
@@ -214,10 +214,9 @@ Wire in this order; each is a Next route handler calling the control-plane.
   control-plane for server-to-server calls, and user auth on the web (GitHub
   OAuth via the same App is the least new surface area). Gate the mutating
   buttons on a signed-in user so `overriddenBy` is real.
-- Postgres. `Store` is already an interface. Add `store/postgres.ts` once
-  the findings methods above are settled so the schema is designed once.
-  Tables: installations, repositories, stages, runs, findings, deliveries,
-  manifests.
+- Postgres. Done: `store/postgres.ts` behind the `Store` interface, used when
+  `DATABASE_URL` is set, with migrations and a contract test suite shared
+  with `MemoryStore`. Local database via `pnpm db:up`.
 - Errors and empty states. Partly done: `src/app/error.tsx` shows "Control
   plane unreachable" with a retry and keeps the top nav. It sits at the root,
   so pipeline header and tabs are not kept; move a boundary into
@@ -236,4 +235,4 @@ Wire in this order; each is a Next route handler calling the control-plane.
 4. ~~Phase 4 polling.~~ Done.
 5. ~~Phase 3 manifest.~~ Done.
 6. Auth, then Phase 5 actions starting with Trigger run and Override gate.
-7. Postgres.
+7. ~~Postgres.~~ Done.

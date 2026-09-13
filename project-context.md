@@ -101,9 +101,17 @@ TypeScript end to end, pnpm workspaces. Control-plane: Hono on
 @hono/node-server, `@octokit/app` + `octokit` (App auth, webhooks, REST,
 pagination). Pinned to the last Octokit majors that support Node 18
 (`octokit@3`, `@octokit/app@14`) from when the dev machine was on Node 18.20;
-it now runs 20.19, so bump once the deploy runtime is Node 20+ too. Postgres
-still planned for runs/findings; today the store is an in-memory
-implementation behind a `Store` interface.
+it now runs 20.19, so bump once the deploy runtime is Node 20+ too.
+
+Storage: `Store` interface with two implementations. `PostgresStore`
+(postgres.js) is used when `DATABASE_URL` is set; `MemoryStore` is the
+reference and fallback. Tables keep key columns for querying and
+compare-and-set plus a `data jsonb` column with the full shared-types object,
+so new optional fields don't need migrations. Migrations live in
+`packages/control-plane/migrations/` and apply on boot under an advisory lock.
+`src/store/store.contract.test.ts` runs the same behavioral suite against both
+stores (`TEST_DATABASE_URL` enables the Postgres half). Local Postgres:
+`pnpm db:up` (Docker, port 5433).
 
 ## First milestone (built, exercised against a real App on 2026-09-13)
 Verified on `TrentK014/nike-storefront` with stages `beta -> main`: deploy
@@ -144,8 +152,9 @@ Layout:
 - `src/slack/` optional, outbound only: posts a report to a channel on
   `run.finished` and a short notice on `deployment.failed`. No inbound
   routes, so no public URL is needed for Slack.
-- `src/store/` `Store` interface + `MemoryStore` (installations, repos,
-  stages, cursors, runs, findings, delivery dedupe).
+- `src/store/` `Store` interface, `PostgresStore` + migrations, and
+  `MemoryStore` (installations, repos, stages, cursors, runs, findings,
+  manifest snapshots, delivery dedupe); `createStore` picks one.
 
 HTTP API (only /webhooks/github is authenticated; everything else needs auth
 + tenant isolation before public exposure):

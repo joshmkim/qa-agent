@@ -19,6 +19,15 @@ pnpm install
 pnpm dev          # web on http://localhost:3000
 ```
 
+The control plane stores data in Postgres when `DATABASE_URL` is set (in-memory otherwise, lost on restart). Local database and tests:
+
+```bash
+pnpm db:up        # Postgres 16 in Docker on localhost:5433 (databases qa_agent, qa_agent_test)
+# packages/control-plane/.env: DATABASE_URL=postgres://qa:qa@localhost:5433/qa_agent
+pnpm --filter @qa-agent/control-plane db:migrate   # also runs automatically on boot
+TEST_DATABASE_URL=postgres://qa:qa@localhost:5433/qa_agent_test pnpm test
+```
+
 Useful routes with the mock data:
 
 - `/` – pipeline list
