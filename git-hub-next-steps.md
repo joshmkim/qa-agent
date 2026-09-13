@@ -68,9 +68,9 @@ Still to check:
 - [ ] Org install: `installation.created` payload shape for `account` on an
       org install (only a user install has been exercised).
 - [ ] Add `gamma` as a middle stage when a three-stage demo is wanted.
-- [ ] Not needed for the App, but needed by the agents: a URL per stage (e.g.
-      Vercel branch deployments) and Supabase data for beta kept separate
-      from prod.
+- [x] Not needed for the App, but needed by the agents: a URL per stage and
+      Supabase data for beta kept separate from prod. Done for `beta`; see
+      `docs/test-environment.md`.
 
 Found while testing:
 
