@@ -49,6 +49,8 @@ Every action self-recovers and returns structured failure.
 
 ## Key design decisions still open per-org
 - State isolation: per-agent test accounts vs. per-agent sandboxed stacks.
+  Current: one isolated beta stack (Vercel + its own Supabase project) with
+  10 shared test shoppers; see `docs/test-environment.md`.
 - Oracle problem: hard errors (free) -> team invariants (authored) -> LLM
   judgment against product description (grows over time).
 

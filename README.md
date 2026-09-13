@@ -9,7 +9,7 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 - `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
 - `packages/agent` – the exploration agent runtime: Playwright browser session, self-recovering tool primitives (click, type, navigate, read_dom, call_api, ...), reporting tools (file_finding, check_invariant), and the model loop. Spawned N times per run by the orchestrator; also runnable standalone from a `ContextBundle` JSON.
 
-The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md).
+The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md). The live environment agents test is described in [`docs/test-environment.md`](docs/test-environment.md).
 
 ## Getting started
 
