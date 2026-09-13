@@ -23,8 +23,6 @@ export const {
   listFindings,
   listAllFindings,
   getFinding,
+  getPipelineManifest,
+  getRunManifest,
 } = source;
-
-// The QA manifest stays on fixtures in both modes until the control plane loads it
-// (pipeline-steps.MD Phase 3).
-export const { getSurface, getInvariant, listSurfaces, listInvariants } = mock;
