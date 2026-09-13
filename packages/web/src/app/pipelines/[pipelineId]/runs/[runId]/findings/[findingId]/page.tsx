@@ -62,6 +62,14 @@ export default async function FindingPage({
             </span>
             <span className="text-text-secondary">·</span>
             <span className="text-text-secondary">Reported {formatDateTime(finding.reportedAt)}</span>
+            {finding.trackedIssue && (
+              <>
+                <span className="text-text-secondary">·</span>
+                <a href={finding.trackedIssue.url} target="_blank" rel="noreferrer" className="mono">
+                  {finding.trackedIssue.key}
+                </a>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

@@ -1,4 +1,5 @@
 import type { ChangeContext, ChangedFile, PullRequestRef } from "@qa-agent/shared-types";
+import { extractJiraKeysFrom } from "../jira/keys";
 import type { InstallationOctokit } from "./app";
 
 /** GitHub returns at most this many commits per compare page. */
@@ -196,12 +197,15 @@ async function enrichPullRequests(
  * - Commit list is paginated past GitHub's 250/page cap.
  * - File count past the 300-file cap is reconstructed from PR metadata, and
  *   `filesTruncated` tells agents the file list is incomplete.
+ * - `jiraProjectKeys` turns on issue-key scanning of PR titles, bodies and
+ *   commit messages; empty means no Jira is configured and none is recorded.
  */
 export async function computeChangeContext(
   octokit: InstallationOctokit,
   ref: RepoRef,
   baseSha: string,
   headSha: string,
+  jiraProjectKeys: string[] = [],
 ): Promise<ChangeContext> {
   let result = await compare(octokit, ref, baseSha, headSha);
   let effectiveBase = baseSha;
@@ -221,6 +225,14 @@ export async function computeChangeContext(
       ? pullRequests.reduce((n, pr) => n + pr.filesChanged, 0)
       : result.files.length;
 
+  const jiraKeys = extractJiraKeysFrom(
+    [
+      ...pullRequests.flatMap((pr) => [pr.title, pr.body]),
+      ...result.commits.map((c) => c.commit.message),
+    ],
+    jiraProjectKeys,
+  );
+
   return {
     baseSha: effectiveBase,
     headSha,
@@ -228,6 +240,7 @@ export async function computeChangeContext(
     filesChanged,
     pullRequests,
     compareStatus: result.status,
+    ...(jiraKeys.length > 0 ? { jiraKeys } : {}),
     changedFiles: result.files,
     filesTruncated,
   };

@@ -33,6 +33,12 @@ export interface ChangeContext {
    * "unavailable" means the compare failed and the run never got a diff.
    */
   compareStatus: "ahead" | "behind" | "identical" | "diverged" | "unavailable";
+  /**
+   * Jira issue keys referenced by the PRs and commits in this window, e.g.
+   * ["QA-12"]. Only keys whose project prefix is configured are kept, so
+   * strings like "UTF-8" never land here.
+   */
+  jiraKeys?: string[];
   /** Files from the compare, used to mark surfaces touched by the change. */
   changedFiles?: ChangedFile[];
   /** True when GitHub capped the compare file list (300 files). */

@@ -53,6 +53,15 @@ export type FindingStatus =
   | "dismissed"
   | "confirmed";
 
+/** An issue filed in an external tracker for a finding. */
+export interface TrackedIssue {
+  provider: "jira";
+  /** Issue key, e.g. "QA-42". */
+  key: string;
+  url: string;
+  filedAt: string; // ISO-8601
+}
+
 /** Agent -> orchestrator. Structured, machine-dedupable. */
 export interface Finding {
   id: string;
@@ -72,6 +81,8 @@ export interface Finding {
   reproSteps: ActionStep[];
   evidence: Evidence[];
   status: FindingStatus;
+  /** Set once this finding has been filed in an external tracker. */
+  trackedIssue?: TrackedIssue;
   /** Populated by the triage judge. */
   triage?: {
     reproducedFromCleanSession: boolean;

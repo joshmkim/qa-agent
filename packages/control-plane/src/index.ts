@@ -9,6 +9,7 @@ import { EventBus } from "./events";
 import { createGitHubApp } from "./github/app";
 import { githubOnboarding } from "./github/onboarding";
 import { githubWebhooks } from "./github/webhooks";
+import { createJiraIntegration } from "./jira";
 import { RunService } from "./runs/service";
 import { createSlackIntegration } from "./slack";
 import { createStore } from "./store/create";
@@ -20,10 +21,10 @@ const github = createGitHubApp(config.github);
 
 const runUrl = (run: Run) => `${config.webUrl}/pipelines/${run.repositoryId}/runs/${run.id}`;
 
-const runs = new RunService({ store, github, events, runUrl });
+const runs = new RunService({ store, github, events, runUrl, jiraProjectKeys: config.jira?.projectKeys });
 
 const app = new Hono();
-app.get("/healthz", (c) => c.json({ ok: true, slack: Boolean(config.slack) }));
+app.get("/healthz", (c) => c.json({ ok: true, slack: Boolean(config.slack), jira: Boolean(config.jira) }));
 app.route("/webhooks", githubWebhooks({ github, store, runs, webBaseUrl: config.github.webBaseUrl }));
 app.route("/github", githubOnboarding({ github, store, config: config.github }));
 app.route("/api", apiRoutes({ store, runs }));
@@ -38,6 +39,20 @@ if (config.slack) {
   console.log(`[slack] enabled; run reports go to channel ${config.slack.channelId}`);
 } else {
   console.log("[slack] disabled (SLACK_BOT_TOKEN not set)");
+}
+
+if (config.jira) {
+  const jira = createJiraIntegration({ config: config.jira, events, store, runUrl });
+  console.log(
+    `[jira] enabled; ${config.jira.minSeverity}+ findings file into ${config.jira.projectKey} as "${config.jira.issueType}"`,
+  );
+  // Surfaces a bad token, wrong site, or missing project at boot rather than
+  // on the first finished run, an hour into a demo.
+  jira.client.verifyAccess().catch((err) => {
+    console.error(`[jira] cannot reach project ${config.jira?.projectKey}; issues will not be filed:`, err.message);
+  });
+} else {
+  console.log("[jira] disabled (JIRA_BASE_URL not set)");
 }
 
 // Always log lifecycle events so runs are traceable without Slack.

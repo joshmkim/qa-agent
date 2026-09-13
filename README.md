@@ -73,3 +73,13 @@ CONTROL_PLANE_URL=http://localhost:3001 pnpm dev     # open /pipelines/repo_stor
 ```
 
 Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs, findings, pipelines). Only the webhook route is authenticated today. Slack reporting is outbound only (no routes); set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to enable it.
+
+## Jira
+
+Also outbound only, so no public URL is needed. When a run finishes, findings at or above `JIRA_MIN_SEVERITY` (default P1) are filed as issues, deduped so a recurring defect comments on the existing issue instead of filing a new one. Issue keys mentioned in PRs and commits are recorded on the run's change context.
+
+1. Create a Jira project from a **Software** template (business templates have no `Bug` issue type) and note its key.
+2. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
+3. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, and `JIRA_PROJECT_KEY` in `packages/control-plane/.env`.
+
+`/healthz` reports `"jira":true` when it is on, and the control plane logs a warning at boot if the project is unreachable. Setup details and the roadmap are in `jira-next-steps.md`.

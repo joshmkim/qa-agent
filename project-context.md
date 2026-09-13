@@ -44,7 +44,8 @@ Every action self-recovers and returns structured failure.
 - Novel mode: conversational interrogation of the fleet's collective run data
   ("did anyone hit the address form with a non-US locale?").
 - Headline output is a confidence statement with surface-inventory coverage %.
-- Deliver findings where work happens: check runs, PR comments.
+- Deliver findings where work happens: check runs, PR comments, Slack
+  reports, and Jira issues in the team's existing backlog.
 
 ## Key design decisions still open per-org
 - State isolation: per-agent test accounts vs. per-agent sandboxed stacks.
@@ -101,17 +102,24 @@ TypeScript end to end, pnpm workspaces. Control-plane: Hono on
 @hono/node-server, `@octokit/app` + `octokit` (App auth, webhooks, REST,
 pagination). Pinned to the last Octokit majors that support Node 18
 (`octokit@3`, `@octokit/app@14`) from when the dev machine was on Node 18.20;
-it now runs 20.19, so bump once the deploy runtime is Node 20+ too.
+it now runs 20.19, so bump once the deploy runtime is Node 20+ too. Postgres
+still planned for runs/findings; today the store is an in-memory
+implementation behind a `Store` interface.
 
-Storage: `Store` interface with two implementations. `PostgresStore`
-(postgres.js) is used when `DATABASE_URL` is set; `MemoryStore` is the
-reference and fallback. Tables keep key columns for querying and
-compare-and-set plus a `data jsonb` column with the full shared-types object,
-so new optional fields don't need migrations. Migrations live in
-`packages/control-plane/migrations/` and apply on boot under an advisory lock.
-`src/store/store.contract.test.ts` runs the same behavioral suite against both
-stores (`TEST_DATABASE_URL` enables the Postgres half). Local Postgres:
-`pnpm db:up` (Docker, port 5433).
+## Integration pattern (decided)
+How every reporting sink is wired, established by Slack and followed by Jira.
+Future sinks (email, PagerDuty, PR comments) should look the same.
+- Sinks subscribe to the `EventBus`; run logic never calls them. Adding one
+  touches no core code.
+- Outbound only by default. Anything inbound (webhooks, slash commands, OAuth
+  callbacks) needs a public HTTPS endpoint, which is the dependency that got
+  Slack's slash commands cut from its MVP. Pay it only when a feature earns
+  it; both Slack and Jira deliver their value without it.
+- A sink failing must never affect the gate. The bus isolates subscribers, and
+  each sink isolates its own units of work on top of that, so a dead token or
+  an outage degrades reporting and nothing else.
+- Config is optional and absence disables the sink, so a fresh clone boots
+  with no third-party accounts at all.
 
 ## First milestone (built, exercised against a real App on 2026-09-13)
 Verified on `TrentK014/nike-storefront` with stages `beta -> main`: deploy
@@ -127,7 +135,7 @@ check run on the head SHA -> `run.started` event. Orchestrator later calls
 
 Layout:
 - `src/config.ts` env loading (GitHub PEM inline or path, GHES base URL,
-  optional Slack).
+  optional Slack, optional Jira).
 - `src/events.ts` `EventBus` with `deployment.detected`, `deployment.failed`,
   `run.started`, `run.finished`. Integrations subscribe here, not in the run service.
 - `src/github/app.ts` App factory + install URL.
@@ -152,9 +160,13 @@ Layout:
 - `src/slack/` optional, outbound only: posts a report to a channel on
   `run.finished` and a short notice on `deployment.failed`. No inbound
   routes, so no public URL is needed for Slack.
-- `src/store/` `Store` interface, `PostgresStore` + migrations, and
-  `MemoryStore` (installations, repos, stages, cursors, runs, findings,
-  manifest snapshots, delivery dedupe); `createStore` picks one.
+- `src/jira/` optional, outbound only: files findings at or above
+  `JIRA_MIN_SEVERITY` as issues on `run.finished`, deduping on a
+  `qafleet-<dedupeKey>` label stored in Jira rather than locally, and scans
+  the change window for issue keys (`ChangeContext.jiraKeys`). Also no
+  inbound routes. See `jira-next-steps.md`.
+- `src/store/` `Store` interface + `MemoryStore` (installations, repos,
+  stages, cursors, runs, findings, delivery dedupe).
 
 HTTP API (only /webhooks/github is authenticated; everything else needs auth
 + tenant isolation before public exposure):

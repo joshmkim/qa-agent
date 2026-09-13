@@ -28,6 +28,8 @@ export interface RunServiceDeps {
   events: EventBus;
   /** Builds the human-facing URL for a run (web UI), used in check runs and Slack. */
   runUrl: (run: Run) => string;
+  /** Jira project prefixes to recognise in PRs and commits; empty disables scanning. */
+  jiraProjectKeys?: string[];
 }
 
 export interface StartRunInput {
@@ -170,6 +172,7 @@ export class RunService {
       { owner: repo.owner, repo: repo.name },
       baseSha,
       headSha,
+      this.deps.jiraProjectKeys,
     );
   }
 
