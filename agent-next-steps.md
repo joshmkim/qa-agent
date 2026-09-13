@@ -10,13 +10,23 @@ in order.
 
 ## 1. First live run (do this first)
 
-- [ ] Run one agent by hand against a real deployment with a real key:
-      write a `ContextBundle` JSON (copy the shape from
-      `packages/agent/scripts/smoke.ts` `bundleFor`), then
-      `ANTHROPIC_API_KEY=... pnpm --filter @qa-agent/agent run -- --bundle b.json --headed`.
-      Watch for: prompt too long on big diffs (lower `patchBudget`), the
-      model ignoring `read_dom` refs, tool results too verbose (snapshot caps
-      in `primitives.ts`).
+- [x] Run one agent by hand against a real deployment. Done 2026-09-13
+      against the nike-storefront beta on Vercel, anonymous shopper, 240s
+      budget, focus shoe-detail/cart/checkout: 49 steps, 45 model calls,
+      2 real P1 findings (advertised discount code YR24 rejected at
+      checkout; home-page -35% sticker with no sale_percent in stock), plus
+      a video. Recipe: `pnpm --filter @qa-agent/agent bundle -- --manifest
+      ~/nike-storefront/.qa/manifest.yaml --base-url <url> --focus a,b --out
+      /tmp/b.json`, then from `packages/agent`: `pnpm exec tsx src/cli.ts
+      --bundle /tmp/b.json --headed --video --out /tmp/r.json` with the
+      control-plane `.env` sourced. Lessons folded in: browser-cancelled
+      requests (`ERR_ABORTED`) are not hard errors; the prompt forbids
+      guessing credentials; blank `AGENT_MODEL=` is treated as unset; the
+      bare `claude-sonnet-4-5` alias is not served, default is 4-6.
+- [ ] Still to watch on bigger runs: prompt too long on big diffs (lower
+      `patchBudget`), tool results too verbose (snapshot caps in
+      `primitives.ts`), and `/api/shoes/<bad id>/stock` returning 500 instead
+      of 404 (noticed by hand; the fuzzer disposition should find it).
 - [ ] Then a full run through the control-plane on `TrentK014/nike-storefront`
       beta with `MAX_FLEET_SIZE=2`, `AGENT_BUDGET_SECONDS=180`. Set
       `environmentUrl` on the stage first. Check the run page, the check run
