@@ -93,7 +93,7 @@ export class JiraReporter {
         config,
       }),
     );
-    await this.record(finding, created.key, created.url, store);
+    const tracked = await this.record(finding, created.key, created.url, store);
     console.log(`[jira] filed ${created.key} for ${finding.severity} finding ${finding.id}`);
 
     if (sprintId !== undefined) {
@@ -107,13 +107,20 @@ export class JiraReporter {
         console.error(`[jira] could not add ${created.key} to the active sprint:`, describe(err));
       }
     }
+
+    // Only for a genuinely new issue, not a recurrence comment on one filed
+    // earlier — other sinks (Slack today) shouldn't re-announce a repeat.
+    this.deps.events.emit("finding.tracked", { repository: e.repository, stage: e.stage, run: e.run, finding: tracked });
   }
 
-  /** Persist the issue link back onto the finding so the UI can show it. */
-  private async record(finding: Finding, key: string, url: string, store: Store): Promise<void> {
-    await store.saveFindings(finding.runId, [
-      { ...finding, trackedIssue: { provider: "jira", key, url, filedAt: new Date().toISOString() } },
-    ]);
+  /** Persist the issue link back onto the finding so the UI can show it, and return the updated finding. */
+  private async record(finding: Finding, key: string, url: string, store: Store): Promise<Finding> {
+    const tracked: Finding = {
+      ...finding,
+      trackedIssue: { provider: "jira", key, url, filedAt: new Date().toISOString() },
+    };
+    await store.saveFindings(finding.runId, [tracked]);
+    return tracked;
   }
 }
 

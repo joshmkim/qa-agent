@@ -146,6 +146,24 @@ Recorded so they can be revisited deliberately rather than rediscovered.
   board (no Scrum board on the project) or no active sprint (Kanban, or
   between sprints) degrades to the pre-existing behavior — filed to the
   backlog, nothing breaks — rather than failing the finding.
+- **Cross-sink notification goes through a new event, not a direct call.**
+  Slack posting when Jira files an issue could have been `JiraReporter`
+  importing `SlackNotifier` and calling it after `createIssue`, but that
+  breaks the rule in `project-context.md`'s "Integration pattern (decided)"
+  that sinks never call each other. Instead `JiraReporter` emits
+  `finding.tracked` on the `EventBus` (provider-agnostic: the event only
+  needs `finding.trackedIssue` to be set, so a future non-Jira tracker sink
+  emits the same event and Slack's subscription needs no changes), and
+  `SlackNotifier` subscribes to it exactly like `run.finished`. Neither
+  module imports the other. Only fires for a genuinely new issue, mirroring
+  the sprint-placement decision above — a recurrence already got its
+  moment when the issue was first filed.
+- **This posts in addition to, not instead of, the run report.** A run that
+  finishes with new findings now sends two Slack messages seconds apart: the
+  full run report (`run.finished`) and one "new issue filed" ping per new
+  issue (`finding.tracked`). Fine for the current volume (a handful of
+  findings per run at most), but a run with many new P0s would send that
+  many separate messages. Revisit if it gets noisy — see Hardening.
 
 ## 4. Jira as agent context (the valuable half)
 
@@ -231,6 +249,11 @@ Current wiring is single-site: one token, one project, from env.
 - [ ] Cap issues filed per run (~20) and fold the remainder into one summary
       issue. A 100-agent run on a badly broken build could otherwise dump
       hundreds of issues into a backlog.
+- [ ] Fold multiple `finding.tracked` pings from the same run into one Slack
+      message ("3 new issues filed: SCRUM-40, SCRUM-41, SCRUM-42") instead of
+      one message per issue, once the same run regularly files more than a
+      couple. Today's per-issue message (see Decisions §3) is fine at current
+      volume but doesn't scale with the cap above.
 - [ ] Retry on 429 honouring `Retry-After`. Atlassian rate limits are
       cost-based and tighter on free; the current client does not retry at all.
 - [ ] Throttle concurrent creates. Findings are filed sequentially today,
