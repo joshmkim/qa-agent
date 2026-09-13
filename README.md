@@ -6,7 +6,8 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 
 - `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
 - `packages/shared-types` – the two real contracts (`ContextBundle`, `Finding`) plus control-plane data shapes (`Pipeline`, `Stage`, `Run`).
-- `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API. Orchestrator not started. See "Control plane" below.
+- `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
+- `packages/agent` – the exploration agent runtime: Playwright browser session, self-recovering tool primitives (click, type, navigate, read_dom, call_api, ...), reporting tools (file_finding, check_invariant), and the model loop. Spawned N times per run by the orchestrator; also runnable standalone from a `ContextBundle` JSON.
 
 The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md).
 
@@ -73,6 +74,30 @@ CONTROL_PLANE_URL=http://localhost:3001 pnpm dev     # open /pipelines/repo_stor
 ```
 
 Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs, findings, pipelines). Only the webhook route is authenticated today. Slack reporting is outbound only (no routes); set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to enable it.
+
+## Agent fleet
+
+With `ANTHROPIC_API_KEY` set, the control-plane orchestrates every run it starts: it takes the run's context from the run service (change, QA manifest with touched surfaces, stage environment and budget), builds one persona per agent (methodical / chaos-monkey / adversarial-fuzzer / impatient-user, each focused on surfaces touched by the change), runs agents in waves of `FLEET_CONCURRENCY`, steers later waves away from saturated surfaces, dedupes findings across agents, and completes the run with a verdict (`block` on any P0) and a confidence statement. The stage needs an `environmentUrl` (and can set `budgetSeconds` per agent):
+
+```bash
+pnpm --filter @qa-agent/agent install-browsers   # once; downloads Chromium
+curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta \
+  -H 'Content-Type: application/json' \
+  -d '{"branch":"beta","protectedBranch":"gamma","environmentUrl":"https://beta.example.com","fleetSize":4}'
+```
+
+Each agent sees the full diff (patches, PR titles/bodies, linked issues), the surface inventory and invariants from the manifest, its persona, and the environment boundaries. It acts only through tools; each tool recovers from the usual stalls (overlays, slow renders, ambiguous targets) and returns a structured failure that lists what is actually on screen. 5xx responses, crashes and uncaught exceptions are auto-filed as findings even if the agent never notices them.
+
+Run one agent by hand from a bundle, or the offline smoke tests (no key, no network):
+
+```bash
+pnpm --filter @qa-agent/agent bundle -- --manifest ../repo/.qa/manifest.yaml --base-url https://beta.example.com --out /tmp/bundle.json
+cd packages/agent && ANTHROPIC_API_KEY=... pnpm exec tsx src/cli.ts --bundle /tmp/bundle.json --headed --video
+pnpm --filter @qa-agent/agent smoke                    # real Chromium, scripted model, planted bugs
+pnpm --filter @qa-agent/control-plane orchestrator-smoke   # waves, dedupe, verdict, coverage
+```
+
+Cost guardrails: `MAX_FLEET_SIZE` (default 8) caps `stage.fleetSize`; each agent is bounded by the stage's `budgetSeconds` (fallback `AGENT_BUDGET_SECONDS`, default 600) and `AGENT_MAX_STEPS` (default 150). See `agent-next-steps.md` for what is stubbed.
 
 ## Jira
 

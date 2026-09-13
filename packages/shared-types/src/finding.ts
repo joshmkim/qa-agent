@@ -1,18 +1,34 @@
 import type { Severity } from "./context-bundle";
 
 export type ActionKind =
+  // browser primitives
   | "navigate"
   | "click"
   | "type"
+  | "press_key"
+  | "select_option"
+  | "scroll"
+  | "wait_for"
+  | "go_back"
   | "screenshot"
   | "read_dom"
+  | "read_text"
   | "call_api"
+  // team-authored semantic actions
   | "login_as"
   | "add_item_to_cart"
+  // observation
+  | "get_console_errors"
+  | "get_network_failures"
   | "get_logs"
   | "get_metrics"
   | "query_db"
-  | "assert";
+  // reporting
+  | "assert"
+  | "check_invariant"
+  | "mark_surface_visited"
+  | "file_finding"
+  | "done";
 
 /** One replayable step in an agent's action trace. */
 export interface ActionStep {

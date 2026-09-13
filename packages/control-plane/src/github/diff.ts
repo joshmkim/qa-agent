@@ -57,6 +57,9 @@ async function compare(
         status: f.status,
         additions: f.additions,
         deletions: f.deletions,
+        // Undefined for binaries and files GitHub won't diff; agents get the
+        // path and counts only in that case.
+        ...(f.patch !== undefined ? { patch: f.patch } : {}),
       }));
     }
     commits.push(...data.commits.map((c) => ({ sha: c.sha, commit: { message: c.commit.message } })));

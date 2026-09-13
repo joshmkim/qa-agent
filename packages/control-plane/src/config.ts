@@ -19,6 +19,21 @@ export interface SlackConfig {
   channelId: string;
 }
 
+export interface OrchestratorEnvConfig {
+  concurrency: number;
+  /** Fallback per-agent budget when the stage doesn't set one. */
+  agentBudgetSeconds: number;
+  maxFleetSize: number;
+  saturationThreshold: number;
+  /** Global URL boundaries added to every bundle on top of the manifest's. */
+  blastRadiusBoundaries: string[];
+  headless: boolean;
+  /** Per-agent tool-call ceiling. */
+  maxSteps: number;
+  /** Record a .webm per agent session. */
+  recordVideo: boolean;
+}
+
 export interface JiraConfig {
   /** Site base URL, e.g. https://your-team.atlassian.net */
   baseUrl: string;
@@ -48,6 +63,11 @@ export interface Config {
   slack?: SlackConfig;
   /** Undefined when JIRA_BASE_URL is unset; issue filing is then disabled. */
   jira?: JiraConfig;
+  /**
+   * Undefined when ANTHROPIC_API_KEY is unset (or ORCHESTRATOR_ENABLED=false);
+   * runs then stay "queued" until something external completes them.
+   */
+  orchestrator?: OrchestratorEnvConfig;
 }
 
 function required(name: string): string {
@@ -80,6 +100,36 @@ function loadSlack(env: NodeJS.ProcessEnv): SlackConfig | undefined {
   return {
     botToken,
     channelId: required("SLACK_CHANNEL_ID"),
+  };
+}
+
+function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const v = env[name];
+  if (v === undefined || v.trim() === "") return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${name} must be a non-negative number, got "${v}"`);
+  return n;
+}
+
+/**
+ * The orchestrator runs agents in-process and needs a model key. It is on
+ * when ANTHROPIC_API_KEY is set unless ORCHESTRATOR_ENABLED=false.
+ */
+function loadOrchestrator(env: NodeJS.ProcessEnv): OrchestratorEnvConfig | undefined {
+  if (env.ORCHESTRATOR_ENABLED === "false") return undefined;
+  if (!env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY.trim() === "") return undefined;
+  return {
+    concurrency: Math.max(1, intEnv(env, "FLEET_CONCURRENCY", 4)),
+    agentBudgetSeconds: Math.max(30, intEnv(env, "AGENT_BUDGET_SECONDS", 600)),
+    maxFleetSize: intEnv(env, "MAX_FLEET_SIZE", 8),
+    saturationThreshold: Math.max(1, intEnv(env, "SATURATION_THRESHOLD", 2)),
+    blastRadiusBoundaries: (env.AGENT_BLAST_RADIUS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    headless: env.AGENT_HEADLESS !== "false",
+    maxSteps: Math.max(10, intEnv(env, "AGENT_MAX_STEPS", 150)),
+    recordVideo: env.AGENT_RECORD_VIDEO === "true",
   };
 }
 
@@ -132,6 +182,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     webUrl: (env.WEB_URL ?? publicUrl).replace(/\/$/, ""),
     slack: loadSlack(env),
     jira: loadJira(env),
+    orchestrator: loadOrchestrator(env),
     github: {
       appId: required("GITHUB_APP_ID"),
       appSlug: env.GITHUB_APP_SLUG,

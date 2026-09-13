@@ -188,9 +188,11 @@ without a manual refresh.
 - [ ] Better: control-plane `GET /api/events` SSE fed by the existing
       `EventBus` (`src/events.ts` already emits deploy/run transitions);
       web subscribes and refreshes on `run.updated` for the current repo.
-- [ ] Fleet exploration is one step today. Once the orchestrator reports
-      per-agent progress, add `RunStep.progress` (0..1) and draw a bar under
-      the "Fleet exploration" step in the run page's Steps container.
+- [ ] Fleet exploration is one step today. The orchestrator now writes
+      "N/M agents done, K raw findings" into `RunStep.detail` after each
+      wave (`RunService.progress`). Next: add `RunStep.progress` (0..1) and
+      draw a bar under the "Fleet exploration" step in the run page's Steps
+      container.
 
 ## Phase 5: Actions (the disabled buttons)
 
@@ -202,7 +204,7 @@ Wire in this order; each is a Next route handler calling the control-plane.
 | Override gate (run)         | `POST /api/runs/:id/complete` with `verdict: "override"` + reason | Should also update the GitHub check run conclusion to `neutral` and record who overrode it (`Run.overriddenBy`, new field). |
 | Re-run (run)                | `POST /api/runs/:id/rerun` (exists)         | Keeps the cursor; `trigger: "rerun"`, `rerunOf` set. Just needs the button wired. |
 | Dismiss (finding)           | `PATCH /api/findings/:id { status: "dismissed", note }` | New endpoint. |
-| Replay repro (finding)      | `POST /api/findings/:id/replay`             | Spawns one agent with the `reproSteps` trace; returns a new run or a `ReplayResult`. Depends on the agent runtime. |
+| Replay repro (finding)      | `POST /api/findings/:id/replay`             | Spawns one agent with the `reproSteps` trace; returns a new run or a `ReplayResult`. Agent runtime exists (`packages/agent`); needs a replay mode that feeds the trace back through `ToolRegistry.dispatch` instead of the model. See `agent-next-steps.md`. |
 | Emit regression test        | `POST /api/findings/:id/regression-test`    | Generates a Playwright spec from `reproSteps`; returns file content or opens a PR. Later. |
 | Ask the fleet               | `POST /api/runs/:id/ask { question }`       | Conversational interrogation mode. Later. |
 | Connect repository (home)   | link to `/github/install` (exists)          | Just a link. |

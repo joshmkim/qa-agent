@@ -10,6 +10,7 @@ import { createGitHubApp } from "./github/app";
 import { githubOnboarding } from "./github/onboarding";
 import { githubWebhooks } from "./github/webhooks";
 import { createJiraIntegration } from "./jira";
+import { InProcessAgentRunner, Orchestrator } from "./orchestrator";
 import { RunService } from "./runs/service";
 import { createSlackIntegration } from "./slack";
 import { createStore } from "./store/create";
@@ -32,6 +33,19 @@ app.route("/api", apiRoutes({ store, runs }));
 if (process.env.DEV_SEED === "true") {
   app.route("/dev", devRoutes(store));
   console.log("[dev] seed route enabled at POST /dev/seed");
+}
+
+if (config.orchestrator) {
+  const o = config.orchestrator;
+  new Orchestrator({
+    runs,
+    events,
+    runner: new InProcessAgentRunner({ headless: o.headless, maxSteps: o.maxSteps, recordVideo: o.recordVideo, log: (m) => console.log(m) }),
+    config: o,
+  }).start();
+  console.log(`[orchestrator] enabled; ${o.concurrency} agents in flight, fleet cap ${o.maxFleetSize || "none"}, budget from stage (default ${o.agentBudgetSeconds}s)`);
+} else {
+  console.log("[orchestrator] disabled (ANTHROPIC_API_KEY not set); runs stay queued until completed via the API");
 }
 
 if (config.slack) {

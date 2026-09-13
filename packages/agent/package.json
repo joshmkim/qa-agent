@@ -1,0 +1,30 @@
+{
+  "name": "@qa-agent/agent",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "run": "tsx src/cli.ts",
+    "bundle": "tsx scripts/bundle-from-manifest.ts",
+    "smoke": "tsx scripts/smoke.ts",
+    "install-browsers": "playwright install chromium",
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'no lint configured for agent'"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.125.0",
+    "@qa-agent/shared-types": "workspace:*",
+    "playwright": "1.61.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.1",
+    "tsx": "4.23.13",
+    "typescript": "5.7.3"
+  }
+}
