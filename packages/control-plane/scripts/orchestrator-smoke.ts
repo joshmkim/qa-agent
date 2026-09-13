@@ -165,11 +165,11 @@ async function scenarioBlocked() {
         b.product.boundaries?.[0] === "Never call the database directly." &&
         b.budgetSeconds === 60,
     ),
-    "bundles carry env (URL boundaries only), manifest product with policy boundaries, and budget",
+    "bundles carry env (URL boundaries only), code primitives product with policy boundaries, and budget",
   );
   assert(
     runner.bundles[0]?.product.surfaces.filter((s) => s.touchedByChange).map((s) => s.id).join() === "s_cart,s_checkout",
-    `touched surfaces come from manifest sources globs (${runner.bundles[0]?.product.surfaces.filter((s) => s.touchedByChange).map((s) => s.id).join()})`,
+    `touched surfaces come from code primitives sources globs (${runner.bundles[0]?.product.surfaces.filter((s) => s.touchedByChange).map((s) => s.id).join()})`,
   );
   assert(new Set(runner.bundles.map((b) => b.persona.disposition)).size >= 3, `dispositions mixed: ${runner.bundles.map((b) => b.persona.disposition).join(",")}`);
   assert(runner.bundles.every((b) => b.persona.focusAreas.some((id) => id === "s_cart" || id === "s_checkout")), "every persona focuses on a touched surface");
@@ -179,7 +179,7 @@ async function scenarioBlocked() {
   assert(run.findings.total === 2 && run.findings.bySeverity.P0 === 1 && run.findings.bySeverity.P2 === 1 && run.findings.duplicatesCollapsed === 1, `counts ${JSON.stringify(run.findings)}`);
   assert(run.fleet.agentsRequested === 5 && run.fleet.agentsCompleted === 4 && run.fleet.agentsFailed === 1 && run.fleet.totalActions === 40, `fleet ${JSON.stringify(run.fleet)}`);
   assert(run.coverage.surfacesTotal === 4 && run.coverage.surfacesVisited === 3 && run.coverage.changedSurfacesTotal === 2 && run.coverage.changedSurfacesVisited === 1 && run.coverage.invariantsChecked === 2, `coverage ${JSON.stringify(run.coverage)}`);
-  assert(run.steps.length === 4 && run.steps[0]?.name === "Load QA manifest" && run.steps.every((s) => s.status === "succeeded" && s.finishedAt), `steps: ${run.steps.map((s) => `${s.name}=${s.status}`).join(", ")}`);
+  assert(run.steps.length === 4 && run.steps[0]?.name === "Load code primitives" && run.steps.every((s) => s.status === "succeeded" && s.finishedAt), `steps: ${run.steps.map((s) => `${s.name}=${s.status}`).join(", ")}`);
   assert(/^Low confidence/.test(run.confidenceStatement ?? "") && /Gap: Checkout/.test(run.confidenceStatement ?? "") && /suspected #7/.test(run.confidenceStatement ?? ""), `statement: ${run.confidenceStatement}`);
   assert((run.confidenceScore ?? 1) < 0.35, `confidence ${run.confidenceScore}`);
 }

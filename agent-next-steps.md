@@ -35,9 +35,9 @@ in order.
       token usage from `ModelResponse.usage` to the result) before raising
       the fleet cap.
 
-## 2. QA manifest (landed on main; merged)
+## 2. Code primitives (landed on main; merged)
 
-The orchestrator now reads `RunService.contextFor(runId)`: the manifest
+The orchestrator now reads `RunService.contextFor(runId)`: the code primitives
 snapshot loaded at the run's head commit, with `touchedByChange` derived
 from each surface's `sources` globs. The fork's `.qa/manifest.yaml` has 26
 surfaces and 10 invariants, so fleet runs get real coverage numbers.
@@ -46,9 +46,9 @@ Remaining:
 - `Invariant.surfaceIds` and `product.boundaries` are rendered in the prompt;
   `ManifestSnapshot.status` of `missing`/`invalid` still yields an empty
   product (agents discover surfaces themselves, coverage "unmeasured").
-- The manifest's `boundaries` are policy text. URL-level blocking is still
+- The code primitives' `boundaries` are policy text. URL-level blocking is still
   the global `AGENT_BLAST_RADIUS`; consider a `blocked_urls` list in the
-  manifest so teams own both.
+  code primitives so teams own both.
 - `scripts/bundle-from-manifest.ts` duplicates the YAML -> ProductContext
   mapping for standalone runs; point it at `manifest/load.ts` once that
   module exposes a file-path entry point.
@@ -109,8 +109,8 @@ on any P0, and templates the confidence statement. Upgrades, in value order:
 ## 6. Agent quality
 
 - Semantic actions: `ToolRegistry` takes `extraTools`; none exist. First
-  ones are `login_as` and whatever the manifest names as core flows. Author
-  them in the repo next to the manifest so teams own them.
+  ones are `login_as` and whatever the code primitives name as core flows. Author
+  them in the repo next to the code primitives so teams own them.
 - Observation tools `get_logs`, `get_metrics`, `query_db` are in
   `ActionKind` but have no implementation. They need an
   `ObservationProvider` per stage (CloudWatch log group, read-only DB

@@ -4,7 +4,7 @@ import { getPipeline, getPipelineManifest } from "@/lib/data";
 import { Code, Container, Pill, SeverityBadge, StatusIndicator } from "@/components/ui";
 import { formatDateTime, shortSha } from "@/lib/format";
 
-const FORMAT_DOCS = "https://github.com/joshmkim/qa-agent/blob/main/docs/qa-manifest.md";
+const FORMAT_DOCS = "https://github.com/joshmkim/qa-agent/blob/main/docs/code-primitives.md";
 
 export default async function ManifestPage({ params }: { params: Promise<{ pipelineId: string }> }) {
   const { pipelineId } = await params;
@@ -116,11 +116,11 @@ export default async function ManifestPage({ params }: { params: Promise<{ pipel
 function ManifestUnavailable({ manifest, path }: { manifest?: ManifestSnapshot; path: string }) {
   const status = manifest?.status ?? "missing";
   return (
-    <Container title="QA manifest">
+    <Container title="Code primitives">
       <div className="space-y-3">
         {status === "missing" ? (
           <>
-            <StatusIndicator tone="warning">No manifest found</StatusIndicator>
+            <StatusIndicator tone="warning">No code primitives found</StatusIndicator>
             <p>
               Add <Code>{path}</Code> to the repository so agents know the product&apos;s surfaces, invariants, and
               boundaries. Runs still happen without it, but only hard errors can be caught.
@@ -129,7 +129,7 @@ function ManifestUnavailable({ manifest, path }: { manifest?: ManifestSnapshot; 
         ) : (
           <>
             <StatusIndicator tone="error">
-              {status === "invalid" ? "Manifest is invalid" : "Manifest could not be read"}
+              {status === "invalid" ? "Code primitives are invalid" : "Code primitives could not be read"}
             </StatusIndicator>
             {manifest?.commitSha && (
               <p className="text-text-secondary">
@@ -147,7 +147,7 @@ function ManifestUnavailable({ manifest, path }: { manifest?: ManifestSnapshot; 
         )}
         <p>
           <a href={FORMAT_DOCS} target="_blank" rel="noreferrer">
-            Manifest format
+            Code primitives format
           </a>{" "}
           · validate locally with <Code>pnpm --filter @qa-agent/control-plane manifest:check .qa/manifest.yaml</Code>
         </p>

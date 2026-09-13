@@ -87,7 +87,7 @@ export interface Finding {
   severity: Severity;
   title: string;
   summary: string;
-  /** Surface id from the manifest this finding is attached to. */
+  /** Surface id from the code primitives this finding is attached to. */
   surfaceId: string;
   oracle: OracleSource;
   /** Set when oracle === "invariant". */

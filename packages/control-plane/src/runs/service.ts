@@ -395,7 +395,7 @@ export class RunService {
   }
 
   /**
-   * The QA manifest at a commit, cached per commit so re-runs don't refetch.
+   * The code primitives at a commit, cached per commit so re-runs don't refetch.
    * Fetch errors are returned (and not cached) so a transient failure is
    * retried by the next run; it never blocks the run itself.
    */
@@ -615,14 +615,14 @@ export class RunService {
   }
 }
 
-/** The "Load QA manifest" step recorded on every run. */
+/** The "Load code primitives" step recorded on every run. */
 function manifestStep(
   snapshot: ManifestSnapshot,
   product: ProductContext | undefined,
   filesTruncated: boolean,
   at: string,
 ): RunStep {
-  const base = { id: randomUUID(), name: "Load QA manifest", startedAt: at, finishedAt: at };
+  const base = { id: randomUUID(), name: "Load code primitives", startedAt: at, finishedAt: at };
   const short = snapshot.commitSha.slice(0, 7);
   switch (snapshot.status) {
     case "loaded": {
@@ -651,7 +651,7 @@ function manifestStep(
 
 /** Markdown lines for the GitHub check summary. */
 function manifestSummary(snapshot: ManifestSnapshot, product: ProductContext | undefined): string[] {
-  const lines = ["", "### QA manifest"];
+  const lines = ["", "### Code primitives"];
   if (snapshot.status !== "loaded" || !product) {
     const why =
       snapshot.status === "missing"

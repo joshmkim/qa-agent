@@ -25,7 +25,7 @@ export interface OrchestratorEnvConfig {
   agentBudgetSeconds: number;
   maxFleetSize: number;
   saturationThreshold: number;
-  /** Global URL boundaries added to every bundle on top of the manifest's. */
+  /** Global URL boundaries added to every bundle on top of the code primitives' boundaries. */
   blastRadiusBoundaries: string[];
   headless: boolean;
   /** Per-agent tool-call ceiling. */

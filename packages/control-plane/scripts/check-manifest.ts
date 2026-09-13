@@ -1,5 +1,5 @@
 /**
- * Validate a QA manifest locally before committing it.
+ * Validate a code primitives file (.qa/manifest.yaml) locally before committing it.
  *
  *   pnpm --filter @qa-agent/control-plane manifest:check <path> [--changed a.ts,b.ts]
  *
