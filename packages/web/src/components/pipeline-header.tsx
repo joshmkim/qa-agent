@@ -1,12 +1,10 @@
 import type { Pipeline } from "@qa-agent/shared-types";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Tabs } from "@/components/tabs";
-import { TriggerRunButton } from "@/components/trigger-run-button";
-import { Button, Icons, PageHeader, Pill } from "@/components/ui";
-import { canWrite } from "@/lib/data";
+import { Icons, PageHeader, Pill } from "@/components/ui";
 
 /**
- * Title, repo/code primitives meta, actions, and tab strip for a pipeline. Shared by
+ * Title, repo/code primitives meta, and tab strip for a pipeline. Shared by
  * the pipeline detail layout and the homepage.
  */
 export function PipelineHeader({
@@ -44,14 +42,6 @@ export function PipelineHeader({
             {pipeline.repository.installationId > 0 && (
               <Pill tone="info">GitHub App · installation {pipeline.repository.installationId}</Pill>
             )}
-          </>
-        }
-        actions={
-          <>
-            <TriggerRunButton pipelineId={pipeline.id} stages={pipeline.stages} enabled={canWrite} />
-            <Button variant="primary" disabled title="Coming soon">
-              Pipeline actions
-            </Button>
           </>
         }
       />
