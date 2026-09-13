@@ -19,6 +19,12 @@ export interface ChangedFile {
   status: "added" | "removed" | "modified" | "renamed" | "copied" | "changed" | "unchanged";
   additions: number;
   deletions: number;
+  /**
+   * Unified diff hunk for this file, as returned by the compare API. Absent
+   * for binary files and for files GitHub considers too large to diff. This
+   * is what gives agents the actual code change, not just the file list.
+   */
+  patch?: string;
 }
 
 /** Diff between last deployed cursor and current head, enriched with PRs. */

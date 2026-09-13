@@ -9,6 +9,8 @@ import {
   type GateVerdict,
   type Repository,
   type Run,
+  type RunStatus,
+  type RunStep,
   type Stage,
 } from "@qa-agent/shared-types";
 import type { EventBus } from "../events";
@@ -86,17 +88,15 @@ const EMPTY_FINDINGS: FindingCounts = {
 };
 
 /**
- * Gate counts exclude duplicates and dismissed findings; every duplicate the
- * triage judge folded into a finding counts as collapsed.
+ * Gate counts exclude duplicates and dismissed findings. `duplicatesCollapsed`
+ * is the sum of each canonical finding's `triage.duplicateCount`; duplicate
+ * rows stored alongside (so the UI can show who else hit it) are those same
+ * duplicates and are not counted again.
  */
 export function countFindings(findings: Finding[]): FindingCounts {
   const counts: FindingCounts = { bySeverity: { P0: 0, P1: 0, P2: 0, P3: 0 }, total: 0, duplicatesCollapsed: 0 };
   for (const f of findings) {
-    if (f.status === "duplicate") {
-      counts.duplicatesCollapsed += 1;
-      continue;
-    }
-    if (f.status === "dismissed") continue;
+    if (f.status === "duplicate" || f.status === "dismissed") continue;
     counts.bySeverity[f.severity] += 1;
     counts.total += 1;
     counts.duplicatesCollapsed += f.triage?.duplicateCount ?? 0;
@@ -369,6 +369,42 @@ export class RunService {
     const stage = await this.deps.store.getStage(existing.stageId);
     if (!stage) throw new RunError(`Stage ${existing.stageId} not found`, "stage-not-found");
     return { existing, stage, repository: await this.repoFor(stage) };
+  }
+
+  /**
+   * Orchestrator reports progress on an active run: moves the status and
+   * upserts one step card by name (started when first seen, finished when
+   * `status` is terminal). Emits nothing; the UI polls.
+   */
+  async progress(
+    runId: string,
+    status: Extract<RunStatus, "assembling-context" | "exploring" | "triaging">,
+    step: { name: string; status: RunStep["status"]; detail?: string },
+  ): Promise<Run> {
+    const { existing } = await this.activeRun(runId);
+    const now = new Date().toISOString();
+    const steps = [...existing.steps];
+    const i = steps.findIndex((s) => s.name === step.name);
+    const terminal = step.status === "succeeded" || step.status === "failed" || step.status === "skipped";
+    if (i === -1) {
+      steps.push({
+        id: randomUUID(),
+        name: step.name,
+        status: step.status,
+        startedAt: now,
+        ...(terminal ? { finishedAt: now } : {}),
+        ...(step.detail ? { detail: step.detail } : {}),
+      });
+    } else {
+      const prev = steps[i] as RunStep;
+      steps[i] = {
+        ...prev,
+        status: step.status,
+        ...(terminal && !prev.finishedAt ? { finishedAt: now } : {}),
+        ...(step.detail !== undefined ? { detail: step.detail } : {}),
+      };
+    }
+    return this.deps.store.updateRun(runId, { status, steps });
   }
 
   /** Orchestrator / triage judge reports findings for a run still in flight. */

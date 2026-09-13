@@ -18,6 +18,17 @@ export interface SlackConfig {
   channelId: string;
 }
 
+export interface OrchestratorEnvConfig {
+  concurrency: number;
+  agentBudgetSeconds: number;
+  maxFleetSize: number;
+  saturationThreshold: number;
+  blastRadiusBoundaries: string[];
+  headless: boolean;
+  /** Per-agent tool-call ceiling. */
+  maxSteps: number;
+}
+
 export interface Config {
   port: number;
   publicUrl: string;
@@ -26,6 +37,11 @@ export interface Config {
   github: GitHubConfig;
   /** Undefined when SLACK_BOT_TOKEN is unset; the bot is then disabled. */
   slack?: SlackConfig;
+  /**
+   * Undefined when ANTHROPIC_API_KEY is unset (or ORCHESTRATOR_ENABLED=false);
+   * runs then stay "queued" until something external completes them.
+   */
+  orchestrator?: OrchestratorEnvConfig;
 }
 
 function required(name: string): string {
@@ -61,6 +77,35 @@ function loadSlack(env: NodeJS.ProcessEnv): SlackConfig | undefined {
   };
 }
 
+function intEnv(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const v = env[name];
+  if (v === undefined || v.trim() === "") return fallback;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n < 0) throw new Error(`${name} must be a non-negative number, got "${v}"`);
+  return n;
+}
+
+/**
+ * The orchestrator runs agents in-process and needs a model key. It is on
+ * when ANTHROPIC_API_KEY is set unless ORCHESTRATOR_ENABLED=false.
+ */
+function loadOrchestrator(env: NodeJS.ProcessEnv): OrchestratorEnvConfig | undefined {
+  if (env.ORCHESTRATOR_ENABLED === "false") return undefined;
+  if (!env.ANTHROPIC_API_KEY || env.ANTHROPIC_API_KEY.trim() === "") return undefined;
+  return {
+    concurrency: Math.max(1, intEnv(env, "FLEET_CONCURRENCY", 4)),
+    agentBudgetSeconds: Math.max(30, intEnv(env, "AGENT_BUDGET_SECONDS", 600)),
+    maxFleetSize: intEnv(env, "MAX_FLEET_SIZE", 8),
+    saturationThreshold: Math.max(1, intEnv(env, "SATURATION_THRESHOLD", 2)),
+    blastRadiusBoundaries: (env.AGENT_BLAST_RADIUS ?? "")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+    headless: env.AGENT_HEADLESS !== "false",
+    maxSteps: Math.max(10, intEnv(env, "AGENT_MAX_STEPS", 150)),
+  };
+}
+
 /** api.github.com -> github.com; ghes.example.com/api/v3 -> ghes.example.com */
 export function deriveWebBaseUrl(apiBaseUrl: string): string {
   const u = new URL(apiBaseUrl);
@@ -81,6 +126,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     publicUrl,
     webUrl: (env.WEB_URL ?? publicUrl).replace(/\/$/, ""),
     slack: loadSlack(env),
+    orchestrator: loadOrchestrator(env),
     github: {
       appId: required("GITHUB_APP_ID"),
       appSlug: env.GITHUB_APP_SLUG,

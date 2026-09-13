@@ -100,10 +100,11 @@ Single monorepo with packages, split later along runtime-profile seam:
 TypeScript end to end, pnpm workspaces. Control-plane: Hono on
 @hono/node-server, `@octokit/app` + `octokit` (App auth, webhooks, REST,
 pagination). Pinned to the last Octokit majors that support Node 18
-(`octokit@3`, `@octokit/app@14`) from when the dev machine was on Node 18.20;
-it now runs 20.19, so bump once the deploy runtime is Node 20+ too. Postgres
-still planned for runs/findings; today the store is an in-memory
-implementation behind a `Store` interface.
+(`octokit@3`, `@octokit/app@14`) because the dev shell still resolves Node
+18.20 (`node --version`); bump once the runtime is Node 20+ everywhere. Same
+reason `packages/agent` pins `playwright@1.61.0` (1.62 requires Node 20) and
+`@anthropic-ai/sdk@0.125.0`. Postgres still planned for runs/findings; today
+the store is an in-memory implementation behind a `Store` interface.
 
 ## First milestone (built, exercised against a real App on 2026-09-13)
 Verified on `TrentK014/nike-storefront` with stages `beta -> main`: deploy
@@ -144,8 +145,83 @@ Layout:
 - `src/slack/` optional, outbound only: posts a report to a channel on
   `run.finished` and a short notice on `deployment.failed`. No inbound
   routes, so no public URL is needed for Slack.
+- `src/orchestrator/` fleet orchestrator + triage judge (see "Agent runtime
+  and orchestration" below). Subscribes to `run.started`; enabled when
+  `ANTHROPIC_API_KEY` is set.
 - `src/store/` `Store` interface + `MemoryStore` (installations, repos,
   stages, cursors, runs, findings, delivery dedupe).
+
+## Agent runtime and orchestration (built 2026-09-13, smoke-tested offline)
+`packages/agent` is the ephemeral runtime; `packages/control-plane/src/orchestrator`
+spawns it. Contracts: `ContextBundle` in, `AgentResult` (findings + trace +
+visited surfaces + checked invariants) out, both in shared-types.
+
+Agent (`packages/agent/src`):
+- `browser/session.ts` `BrowserSession`: one Chromium context per agent.
+  Passively records console errors, uncaught exceptions, crashes, >=400
+  responses and dead requests. Enforces blast-radius boundaries by aborting
+  matching requests at the network layer. Screenshots to disk
+  (`Evidence.content` is the path; object storage is a next step).
+- `browser/snapshot.ts` `read_dom` view: interactive elements get refs
+  (`e12`, written as `data-qa-ref`) the model can click/type by. Browser-side
+  code is a plain-JS string because tsx's `keepNames` injects a `__name`
+  helper into serialized callbacks that does not exist in the page.
+- `tools/locate.ts` resolves what the model says into an element: ref ->
+  explicit prefix (`text=`, `role=`, `testid=`, `css=`) -> CSS -> role+name ->
+  label/placeholder/testid -> text, exact before substring, visible first.
+- `tools/primitives.ts` navigate, click, type, press_key, select_option,
+  scroll, wait_for, go_back, screenshot, read_dom, read_text, call_api. Every
+  failure is structured and lists what is on screen; click dismisses
+  overlays and falls back to force/dispatch; type falls back to keyboard.
+- `tools/observe.ts` get_console_errors, get_network_failures.
+- `tools/report.ts` file_finding (validates surface/invariant ids, dedupe key
+  per agent, evidence = fresh screenshot + recent errors, repro = trace from
+  `stepsFrom`), check_invariant (auto-files at the invariant's severity),
+  mark_surface_visited (coverage), done.
+- `tools/registry.ts` schemas for the model + dispatch with a 45s ceiling;
+  every call becomes an `ActionStep`.
+- `prompt.ts` system prompt: persona + disposition script, product intent
+  and stakeholders, surface inventory (marks: touched / saturated / focus),
+  invariants, environment + boundaries, PRs with bodies, changed-file groups,
+  and the code patches under a character budget ordered by relevance to the
+  surfaces. Tests and lockfiles sink to the bottom.
+- `loop.ts` `ExplorationLoop`: tool-calling loop bounded by
+  `budgetSeconds` and `maxSteps`, budget warnings at 15%/60s, history
+  compaction of old tool results, model retries with backoff. Hard errors
+  drained after every step are auto-filed (5xx -> P1, crash -> P0, uncaught
+  exception -> P2, dead request -> P3) on the surface guessed from the URL,
+  so they are findings even if the model ignores them.
+- `model/` `ModelClient` interface + Anthropic Messages adapter
+  (`@anthropic-ai/sdk`, `AGENT_MODEL`, default claude-sonnet-4-5). Bedrock
+  is the same call shape via `@anthropic-ai/bedrock-sdk`.
+- `index.ts` `runAgent(bundle, opts)`; `cli.ts` runs one from a JSON bundle;
+  `scripts/smoke.ts` scripted model vs a local storefront with planted bugs.
+
+Orchestrator (`packages/control-plane/src/orchestrator`):
+- `manifest.ts` `ManifestProvider` seam for the QA manifest work (owned
+  separately) + `FallbackManifestProvider` (empty inventory) +
+  `markTouchedSurfaces` heuristic from changed file paths.
+- `personas.ts` disposition mix 40/25/20/15 (largest remainder, interleaved
+  so every wave is mixed); focus areas rotate through touched surfaces first.
+- `discovery.ts` `DiscoveryBoard`: a surface is saturated after
+  `SATURATION_THRESHOLD` consecutive quiet visits; a new distinct finding
+  reopens it.
+- `runner.ts` `AgentRunner` interface; `InProcessAgentRunner` dynamic-imports
+  `@qa-agent/agent` (control-plane still boots without Chromium). This is the
+  runtime-profile seam for a container/queue spawn later.
+- `triage.ts` dedupe by `dedupeKey` (canonical = shortest repro; hit by
+  another agent => `reproducedFromCleanSession`, status `reproduced`),
+  suspected PR by token overlap (single PR => that PR), coverage, fleet
+  summary, verdict (`block` on any P0), confidence score and a templated
+  confidence statement in the fixtures' voice.
+- `index.ts` `Orchestrator.orchestrate(run)`: `RunService.progress` moves the
+  status through assembling-context -> exploring -> triaging and the three
+  step cards (Assemble context / Fleet exploration / Triage & reproduce);
+  waves of `FLEET_CONCURRENCY`; findings streamed to the store after each
+  wave; any infra failure -> `failRun`. Requires `stage.environmentUrl`.
+
+`RunService.countFindings` now sums canonical `triage.duplicateCount` only;
+stored duplicate rows are those same duplicates (matches the fixtures: 41).
 
 HTTP API (only /webhooks/github is authenticated; everything else needs auth
 + tenant isolation before public exposure):

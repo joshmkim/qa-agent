@@ -8,6 +8,7 @@
     "start": "tsx src/index.ts",
     "create-app": "tsx scripts/create-github-app.ts",
     "tunnel": "tsx scripts/tunnel.ts",
+    "orchestrator-smoke": "tsx scripts/orchestrator-smoke.ts",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured for control-plane'"
@@ -15,6 +16,7 @@
   "dependencies": {
     "@hono/node-server": "1.19.17",
     "@octokit/app": "14.1.0",
+    "@qa-agent/agent": "workspace:*",
     "@qa-agent/shared-types": "workspace:*",
     "@slack/web-api": "7.19.0",
     "dotenv": "17.4.2",
