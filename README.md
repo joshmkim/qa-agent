@@ -12,7 +12,7 @@ Verified so far: a single hand-run agent against a live deployed storefront foun
 
 1. **GitHub** (GitHub App) — webhook-driven deploy detection, diff/PR enrichment between stage promotions, and the promotion gate itself via the Checks API + branch protection. Live-tested end-to-end against a real installed App on a real repository.
 2. **Slack** — outbound run reports (verdict, confidence statement, findings by severity, coverage, links back to the run) posted to a channel via a bot token. Smoke-tested through the real run-completion code path.
-3. **Jira** — outbound issue filing for findings at or above a configurable severity, deduped against issues already filed for the same defect, plus scanning PRs/commits for issue keys to attach back to the change.
+3. **Jira** — outbound issue filing for findings at or above a configurable severity, deduped against issues already filed for the same defect, added to the project's active sprint (not left in the backlog), plus scanning PRs/commits for issue keys to attach back to the change. Filing a genuinely new issue also triggers a Slack notification, wired through a decoupled event rather than Jira calling Slack directly.
 
 ## 03 · Setup instructions
 
@@ -114,7 +114,7 @@ Cost guardrails: `MAX_FLEET_SIZE` (default 8) caps `stage.fleetSize`; each agent
 
 ### Jira
 
-Also outbound only, so no public URL is needed. When a run finishes, findings at or above `JIRA_MIN_SEVERITY` (default P1) are filed as issues, deduped so a recurring defect comments on the existing issue instead of filing a new one. Issue keys mentioned in PRs and commits are recorded on the run's change context.
+Also outbound only, so no public URL is needed. When a run finishes, findings at or above `JIRA_MIN_SEVERITY` (default P1) are filed as issues, deduped so a recurring defect comments on the existing issue instead of filing a new one. Newly filed issues are placed on the project's active sprint (falling back to the backlog if there is no board or active sprint), and each one also posts a short "new issue filed" notification to Slack — a separate `finding.tracked` event on the `EventBus`, not Jira calling Slack directly. Issue keys mentioned in PRs and commits are recorded on the run's change context.
 
 1. Create a Jira project from a **Software** template (business templates have no `Bug` issue type) and note its key.
 2. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
@@ -131,7 +131,7 @@ Also outbound only, so no public URL is needed. When a run finishes, findings at
 - **Live agent run**: one agent run by hand with a real Claude model against a live deployed environment (see `docs/test-environment.md`) found 2 real, previously-unknown bugs.
 - **Slack**: smoke-tested by posting a real report through `RunService.completeRun`/`failRun` to a live channel.
 - **Frontend**: manually driven with a headless browser after each UI change (home, pipeline, findings pages), checking for console errors and visual correctness against the design reference.
-- **Known gaps, stated honestly**: the full multi-agent fleet run through the control plane hasn't been executed end-to-end yet; agent credential resolution isn't wired up, so a full run currently hits a login wall (`agent-next-steps.md` §1, §3); Jira has not yet been verified against a live site (`jira-next-steps.md`).
+- **Known gaps, stated honestly**: the full multi-agent fleet run through the control plane hasn't been executed end-to-end yet; agent credential resolution isn't wired up, so a full run currently hits a login wall (`agent-next-steps.md` §1, §3); Jira — including its sprint placement and the Jira → Slack notification — has not yet been verified against a live site (`jira-next-steps.md`).
 
 ## 05 · Demo video
 
