@@ -1,0 +1,210 @@
+@import "tailwindcss";
+
+/* Cloudscape "visual refresh" inspired tokens so the UI reads like Amazon Pipelines. */
+@theme {
+  --font-sans: "Amazon Ember", "Helvetica Neue", Roboto, Arial, sans-serif;
+  --font-mono: "Amazon Ember Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-nav: #232f3e;
+  --color-nav-hover: #2f3e52;
+  --color-page: #f2f3f3;
+  --color-surface: #ffffff;
+  --color-border: #e9ebed;
+  --color-border-strong: #8c8c94;
+  --color-divider: #e9ebed;
+
+  --color-text: #000716;
+  --color-text-secondary: #5f6b7a;
+  --color-text-inverted: #ffffff;
+
+  --color-link: #0972d3;
+  --color-link-hover: #033160;
+
+  --color-success: #037f0c;
+  --color-success-bg: #f2fcf3;
+  --color-error: #d91515;
+  --color-error-bg: #fff7f7;
+  --color-warning: #8d6605;
+  --color-warning-bg: #fffce9;
+  --color-info: #0972d3;
+  --color-info-bg: #f2f8fd;
+  --color-pending: #5f6b7a;
+  --color-pending-bg: #f4f4f4;
+
+  --color-sev-p0: #d91515;
+  --color-sev-p1: #ff5d00;
+  --color-sev-p2: #8d6605;
+  --color-sev-p3: #5f6b7a;
+
+  --radius-container: 16px;
+  --radius-control: 8px;
+  --radius-pill: 20px;
+}
+
+html,
+body {
+  background: var(--color-page);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-link);
+}
+a:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+.awsui-container {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-container);
+  box-shadow: 0 1px 1px 0 rgba(0, 7, 22, 0.05), 0 1px 4px 0 rgba(0, 7, 22, 0.08);
+}
+
+.awsui-container-header {
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-divider);
+  background: #fafafa;
+  border-radius: var(--radius-container) var(--radius-container) 0 0;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 20px;
+  border-radius: var(--radius-pill);
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.btn:hover {
+  text-decoration: none;
+}
+.btn-primary {
+  background: var(--color-link);
+  color: var(--color-text-inverted);
+  border-color: var(--color-link);
+}
+.btn-primary:hover {
+  background: var(--color-link-hover);
+  border-color: var(--color-link-hover);
+  color: var(--color-text-inverted);
+}
+.btn-normal {
+  background: var(--color-surface);
+  color: var(--color-link);
+  border-color: var(--color-link);
+}
+.btn-normal:hover {
+  background: var(--color-info-bg);
+  color: var(--color-link-hover);
+  border-color: var(--color-link-hover);
+}
+.btn-disabled,
+.btn:disabled {
+  background: var(--color-surface);
+  color: #9ba7b6;
+  border-color: #9ba7b6;
+  cursor: not-allowed;
+}
+
+.tab-link {
+  display: inline-block;
+  padding: 10px 20px;
+  font-weight: 700;
+  color: var(--color-link);
+  border-bottom: 4px solid transparent;
+  margin-bottom: -1px;
+}
+.tab-link:hover {
+  color: var(--color-link-hover);
+  text-decoration: none;
+}
+.tab-link[data-active="true"] {
+  color: var(--color-text);
+  border-bottom-color: var(--color-link);
+}
+
+.kv-label {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1.2s linear infinite;
+}
+
+/* Stage graph connector */
+.stage-connector {
+  position: relative;
+  width: 40px;
+  flex: 0 0 40px;
+  align-self: stretch;
+}
+.stage-connector::before {
+  content: "";
+  position: absolute;
+  top: 44px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--color-border-strong);
+}
+.stage-connector::after {
+  content: "";
+  position: absolute;
+  top: 39px;
+  right: -1px;
+  width: 0;
+  height: 0;
+  border-left: 8px solid var(--color-border-strong);
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+}
+
+table.awsui-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+table.awsui-table th {
+  text-align: left;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--color-divider);
+  background: #fafafa;
+  white-space: nowrap;
+}
+table.awsui-table td {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: top;
+}
+table.awsui-table tr:last-child td {
+  border-bottom: none;
+}
+table.awsui-table tbody tr:hover td {
+  background: #f8f9fa;
+}
