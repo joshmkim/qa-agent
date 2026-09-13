@@ -12,6 +12,8 @@ export interface AnthropicModelOptions {
   model?: string;
   /** Override for proxies / gateways. */
   baseURL?: string;
+  /** Required by org-level keys that aren't scoped to a workspace (ANTHROPIC_WORKSPACE_ID). */
+  workspaceId?: string;
   maxTokens?: number;
 }
 
@@ -32,12 +34,14 @@ export class AnthropicModelClient implements ModelClient {
     this.model = opts.model ?? process.env.AGENT_MODEL ?? DEFAULT_MODEL;
     this.maxTokens = opts.maxTokens ?? 2048;
     this.name = `anthropic:${this.model}`;
+    const workspaceId = opts.workspaceId ?? process.env.ANTHROPIC_WORKSPACE_ID;
     this.client =
       client ??
       new Anthropic({
         apiKey: opts.apiKey ?? process.env.ANTHROPIC_API_KEY,
         baseURL: opts.baseURL ?? process.env.ANTHROPIC_BASE_URL,
         maxRetries: 3,
+        ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
       });
   }
 
