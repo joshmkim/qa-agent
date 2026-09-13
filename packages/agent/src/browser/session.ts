@@ -140,8 +140,10 @@ export class BrowserSession {
     });
     page.on("requestfailed", (req: Request) => {
       const failure = req.failure()?.errorText ?? "unknown";
-      // Our own blast-radius aborts are not app failures.
-      if (failure.includes("BLOCKED_BY_CLIENT")) return;
+      // Our own blast-radius aborts, and the browser cancelling its own
+      // requests (navigation away mid-load, prefetch, preflight), are not app
+      // failures. Real network errors (refused, DNS, timeout, reset) still count.
+      if (failure.includes("BLOCKED_BY_CLIENT") || failure.includes("ERR_ABORTED")) return;
       this.pushNetwork({ method: req.method(), url: req.url(), failureText: failure, pageUrl: page.url(), at: now() });
     });
     page.on("response", (res) => {

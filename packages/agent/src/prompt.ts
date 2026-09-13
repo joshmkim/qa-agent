@@ -120,7 +120,7 @@ export function renderEnvironment(bundle: ContextBundle): string {
   const lines = [
     `Stage: ${env.stageName}`,
     `Base URL: ${env.baseUrl}`,
-    `Credentials: ${env.credentialsRef} (already applied to your browser session where possible; if you hit a login wall, look for test-account hints on the page or in the PRs, otherwise report it as untested)`,
+    `Credentials: ${env.credentialsRef}. If you hit a login wall and no test account was given to you, do NOT guess or invent credentials (never type real-looking emails or passwords); test the login form's validation once, then continue as an anonymous user and list the signed-in flows under done(untested).`,
   ];
   if (env.seededDataRef) lines.push(`Seeded data: ${env.seededDataRef}`);
   if (env.blastRadiusBoundaries.length) {
