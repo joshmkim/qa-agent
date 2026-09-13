@@ -1,4 +1,4 @@
-import type { DeployCursor, Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { DeployCursor, Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
 
 /** One tenant: an org or user account that installed the GitHub App. */
 export interface Installation {
@@ -59,6 +59,12 @@ export interface Store {
   listFindings(runId: string): Promise<Finding[]>;
   listFindingsByRepository(repositoryId: string, limit?: number): Promise<Finding[]>;
   getFinding(findingId: string): Promise<Finding | undefined>;
+
+  // --- QA manifests (snapshot per repository + commit) ---
+  saveManifestSnapshot(repositoryId: string, snapshot: ManifestSnapshot): Promise<void>;
+  getManifestSnapshot(repositoryId: string, commitSha: string): Promise<ManifestSnapshot | undefined>;
+  /** Most recently loaded snapshot for the repository, any commit. */
+  getLatestManifestSnapshot(repositoryId: string): Promise<ManifestSnapshot | undefined>;
 
   // --- webhook delivery dedupe ---
   /** Returns true if this delivery id is new (and records it). */

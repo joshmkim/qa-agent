@@ -1,13 +1,6 @@
 /** Fixture-backed data source. Used when DATA_SOURCE=mock or no control plane is configured. */
-import type {
-  Finding,
-  Invariant,
-  Pipeline,
-  Run,
-  Stage,
-  Surface,
-} from "@qa-agent/shared-types";
-import { pipeline, invariants, surfaces } from "../mock/pipeline";
+import type { Finding, ManifestSnapshot, Pipeline, Run, Stage } from "@qa-agent/shared-types";
+import { manifestSnapshot, pipeline } from "../mock/pipeline";
 import { runs } from "../mock/runs";
 import { findings } from "../mock/findings";
 
@@ -55,18 +48,10 @@ export async function getFinding(findingId: string): Promise<Finding | undefined
   return findings.find((f) => f.id === findingId);
 }
 
-export async function getSurface(surfaceId: string): Promise<Surface | undefined> {
-  return surfaces.find((s) => s.id === surfaceId);
+export async function getPipelineManifest(pipelineId: string): Promise<ManifestSnapshot | undefined> {
+  return pipelineId === pipeline.id ? manifestSnapshot : undefined;
 }
 
-export async function getInvariant(invariantId: string): Promise<Invariant | undefined> {
-  return invariants.find((i) => i.id === invariantId);
-}
-
-export async function listSurfaces(): Promise<Surface[]> {
-  return surfaces;
-}
-
-export async function listInvariants(): Promise<Invariant[]> {
-  return invariants;
+export async function getRunManifest(runId: string): Promise<ManifestSnapshot | undefined> {
+  return runs.some((r) => r.id === runId) ? manifestSnapshot : undefined;
 }

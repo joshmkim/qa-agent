@@ -190,11 +190,27 @@ Deferred / known gaps:
 - `@slack/web-api` is pinned to 7.x (8.x needs Node 20), same reason as the
   Octokit pins.
 
+## QA manifest (built)
+`.qa/manifest.yaml` in the repo under test, format in `docs/qa-manifest.md`:
+product intent, surfaces (with `sources` globs mapping them to code),
+invariants (with severity and optional surface refs), and boundaries.
+- Loaded at each run's head SHA and cached per `(repository, commit)`;
+  `Run.manifest` records path, commit, status, and version (short blob SHA).
+- Missing/invalid manifests never block a run: a skipped/failed "Load QA
+  manifest" step and a note on the GitHub check.
+- `touchedByChange` is computed per run from `change.changedFiles`; the
+  check lists touched surfaces and coverage totals are filled at run start.
+- `GET /api/runs/:id/context` returns `RunContext` (change + product +
+  environment). The orchestrator adds agentId, persona and saturated
+  surfaces to make each agent's `ContextBundle`. Stage `credentialsRef` and
+  `budgetSeconds` feed the environment.
+- Authoring: `pnpm --filter @qa-agent/control-plane manifest:check <file>`.
+
 ## Web integration (built)
 `packages/web/src/lib/data.ts` is the only data seam. It uses
 `src/lib/data/control-plane.ts` (server-side fetches to `CONTROL_PLANE_URL`,
 `no-store`) when `CONTROL_PLANE_URL` is set or `DATA_SOURCE=api`, and the
-fixtures in `src/lib/data/mock.ts` otherwise. QA manifest reads (surfaces,
-invariants) stay on fixtures until the manifest loader exists. Pages that
+fixtures in `src/lib/data/mock.ts` otherwise. The Manifest tab and finding
+pages read the manifest snapshot the run used. Pages that
 show in-flight runs poll with `router.refresh()` every 15s. Remaining
 integration work is tracked in `pipeline-steps.MD`.

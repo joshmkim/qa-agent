@@ -1,5 +1,5 @@
 /** Control-plane backed data source. Server-only: reads CONTROL_PLANE_URL. */
-import type { Finding, Pipeline, Run, Stage } from "@qa-agent/shared-types";
+import type { Finding, ManifestSnapshot, Pipeline, Run, Stage } from "@qa-agent/shared-types";
 
 const baseUrl = (process.env.CONTROL_PLANE_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -46,4 +46,12 @@ export async function listAllFindings(pipelineId: string): Promise<Finding[]> {
 
 export async function getFinding(findingId: string): Promise<Finding | undefined> {
   return get<Finding>(`/findings/${id(findingId)}`);
+}
+
+export async function getPipelineManifest(pipelineId: string): Promise<ManifestSnapshot | undefined> {
+  return get<ManifestSnapshot>(`/pipelines/${id(pipelineId)}/manifest`);
+}
+
+export async function getRunManifest(runId: string): Promise<ManifestSnapshot | undefined> {
+  return get<ManifestSnapshot>(`/runs/${id(runId)}/manifest`);
 }

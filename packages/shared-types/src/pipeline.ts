@@ -1,4 +1,4 @@
-import type { ChangeContext, Severity } from "./context-bundle";
+import type { ChangeContext, ManifestSnapshot, Severity } from "./context-bundle";
 
 export interface Repository {
   id: string;
@@ -102,6 +102,8 @@ export interface Run {
   fleet: FleetSummary;
   coverage: CoverageSummary;
   findings: FindingCounts;
+  /** Which QA manifest this run used; the full snapshot is served separately. */
+  manifest?: Omit<ManifestSnapshot, "product"> & { version?: string };
   /** GitHub check run id once posted. */
   checkRunId?: number;
   startedAt: string;
@@ -117,6 +119,10 @@ export interface Stage {
   /** Stage order left-to-right in the pipeline view. */
   order: number;
   environmentUrl?: string;
+  /** Reference into a secrets store for test credentials, never the credential itself. */
+  credentialsRef?: string;
+  /** Wall-clock budget per agent, in seconds. */
+  budgetSeconds?: number;
   cursor?: DeployCursor;
   /** Whether promotion into the next stage is gated by this stage's run. */
   gatesPromotion: boolean;
