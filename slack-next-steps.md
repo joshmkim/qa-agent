@@ -1,105 +1,113 @@
 # Slack bot: next steps
 
-State as of 2026-09-13: the Slack integration in `packages/control-plane/src/slack/`
-is built, typechecks, and passed a smoke test against the merged control-plane
-(signature verification, `/qa` commands, button kickoff, threaded reports).
-It has not yet been exercised against a real Slack workspace.
+State as of 2026-09-13: the MVP Slack integration in
+`packages/control-plane/src/slack/` is outbound only. It subscribes to
+`run.finished` and posts one report per run (verdict, confidence statement,
+findings by severity, coverage, fleet, PRs under test, links to the web UI;
+or a failure report for infra errors), and to `deployment.failed` for a short
+notice when a deployment could not be assessed. It typechecks and passed a smoke test
+through the real `RunService.completeRun` / `failRun` path.
 
-## 1. Go live against a real workspace
+Because nothing inbound exists, Slack never calls the control plane, so no
+public URL or tunnel (ngrok, cloudflared) is needed. The GitHub webhook still
+needs one for push-based deploy detection; runs can also be started from CI
+via `POST /api/runs` without it.
 
-- [ ] Create the Slack app at https://api.slack.com/apps.
-  - Bot token scopes: `chat:write`, `commands`.
-  - Slash command `/qa` -> `https://<public host>/slack/commands`.
-  - Interactivity enabled -> `https://<public host>/slack/interactions`.
-  - Install to the workspace; invite the bot to the target channel.
-- [ ] Fill `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, `SLACK_CHANNEL_ID` in
-      `packages/control-plane/.env` (see `.env.example`).
-- [ ] Local dev needs a public URL for Slack callbacks. Reuse the smee.io relay
-      pattern from the GitHub webhook, or ngrok. Both `/slack/*` routes need it.
-- [ ] Manual verification checklist:
-  - `/qa help`, `/qa status <owner/repo>` reply ephemerally.
-  - Push to a stage with `autoRun: false` -> deployment message with the
-    Run QA button; click it -> message edits in place to "run started".
-  - `/qa run <owner/repo> <stage>` -> ack, then a run-started message.
-  - `POST /api/runs/:id/complete` -> report threaded under the start message
-    and broadcast to the channel.
-  - Confirm rendering of the report `fields` section on mobile (four fields
-    wrap to two columns; check nothing truncates).
+Slash commands, the deployment notice, and the "Run QA fleet" button were
+built, verified, and then cut from the MVP because they require Slack to
+reach a public HTTPS endpoint. They're listed below as future work; the
+removed code is in git history if we want to restore it rather than rewrite.
+
+## 1. Go live (MVP)
+
+- [ ] Create the Slack app "From a manifest" at https://api.slack.com/apps
+      using `packages/control-plane/slack-app-manifest.json` (bot user,
+      `chat:write` scope only).
+- [ ] Install to the workspace; copy the Bot User OAuth Token (`xoxb-...`).
+- [ ] Pick the channel, copy its ID (channel details -> About), and
+      `/invite @QA Fleet` there. Without the invite `chat.postMessage` fails
+      with `not_in_channel` (logged, run completion unaffected).
+- [ ] Set `SLACK_BOT_TOKEN`, `SLACK_CHANNEL_ID`, and `WEB_URL` in
+      `packages/control-plane/.env`.
+- [ ] Verify: start the control plane, confirm `/healthz` shows
+      `"slack":true`, create a run, then `POST /api/runs/:id/complete` with a
+      sample body and check the report lands in the channel. Check the
+      four-field section renders acceptably on mobile.
 
 ## 2. Close the "missed deployment" gap (done)
 
-If the compare fails, the cursor stays put and a failed run is recorded (see
-`git-hub-next-steps.md` §2).
+A failed compare leaves the cursor untouched, records a failed run, and posts
+an `action_required` check (see `git-hub-next-steps.md` §2).
 
-- [x] `deployment.failed` event in `src/events.ts` (repository, stage,
-      headSha, reason, run).
+- [x] `deployment.failed` event (repository, stage, headSha, reason, run).
 - [x] Emitted from `RunService.detectDeployment` when `computeChange` throws.
 - [x] Notifier posts a short notice ("Couldn't assemble context for
-      `abc1234` on `beta`… the next push retries from the same base") with a
-      link to the failed run. No button, no thread.
+      `abc1234`…") with a link to the failed run. Outbound, so still no
+      public URL.
 
-## 3. Durable message tracking
-
-`SlackNotifier` keeps two in-memory maps (pending deployments keyed by
-`stageId:headSha`, run messages keyed by `runId`). A restart between run start
-and run finish loses the thread, so the report posts unthreaded.
-
-- [ ] Add `slackMessage?: { channel: string; ts: string }` to `Run` in
-      shared-types (or a side table) and persist it via `store.updateRun`.
-- [ ] Persist the pending-deployment handle on the stage or in a small
-      `deployments` table once Postgres lands.
-- [ ] Drop the in-memory maps once both are stored.
-
-## 4. Richer reports
+## 3. Richer reports
 
 Today the report uses `FindingCounts` only. Findings are now persisted
 (`store.listFindings(runId)`, most severe first), so this is unblocked.
 
-- [ ] Once findings are persisted, list the top N (P0/P1 first) with title,
-      surface, and a link to the finding page. Cap at ~5 to stay under Block
-      Kit limits; link to the web UI for the rest.
-- [ ] Include the suspected PR (`triage.suspectedPrNumber`) next to each
-      finding when present; that is the thing an on-call wants first.
-- [ ] Consider a mid-run progress edit (agents completed / findings so far)
-      on the start message once the orchestrator emits progress events.
+- [ ] List the top N findings (P0/P1 first) with title, surface, and a
+      link. Cap at ~5; link to the web UI for the rest.
+- [ ] Show `triage.suspectedPrNumber` next to each finding when present.
+- [ ] Optional: a "run started" notice on `run.started` (outbound, so still
+      no public URL) and thread the report under it. Requires persisting the
+      Slack message `ts` on the run so a restart doesn't lose the thread.
 
-## 5. Gate actions from Slack
+## 4. Inbound: kickoff from Slack (needs a public HTTPS endpoint)
 
-The report shows the verdict but offers no way to act on it.
+Restore from git history or rebuild:
+- [ ] `/qa run <owner/repo> <stage> [sha]`, `/qa status`, `/qa help`
+      (slash command -> `/slack/commands`).
+- [ ] Deployment notice with a "Run QA fleet" button for stages with
+      `autoRun: false` (interactivity -> `/slack/interactions`), edited in
+      place when the run starts.
+- [ ] Request signature verification (`v0=` HMAC, 5-minute replay window),
+      3-second ack with background work, errors via `response_url`.
+- [ ] `SLACK_SIGNING_SECRET` back in config; `commands` scope, slash
+      command, and interactivity URL back in the manifest.
+- [ ] Authorization: allowlist or group check on who may run.
+- [ ] Alternative if a public URL stays blocked: Slack Socket Mode
+      (`@slack/socket-mode`, app-level token). Outbound WebSocket from the
+      control plane, no inbound URL, but a persistent connection per instance.
 
-- [ ] "Override and promote" button on blocked runs -> sets verdict
-      `override`, completes the check run as neutral. Needs an authorization
-      story first (who may override; see auth work for the web UI).
-- [ ] "Re-run" button on finished runs -> `startRun` with `trigger: manual`
-      at the same head SHA. Requires relaxing the cursor CAS for re-runs
-      (currently a re-run at the same head is a cursor conflict).
+## 5. Gate actions from Slack (also inbound)
 
-## 6. Routing and configuration
+- [ ] "Override and promote" on blocked runs -> verdict `override`, check run
+      neutral. Needs the authorization story first.
+- [ ] "Re-run" on finished runs. The backend exists
+      (`POST /api/runs/:id/rerun`, same head SHA, cursor untouched); only the
+      inbound Slack button is missing.
 
-- [ ] Per-stage channel override (`Stage.slackChannelId?`) so beta and gamma
-      can notify different channels. Fall back to `SLACK_CHANNEL_ID`.
-- [ ] Per-repo or per-stage mute (`notify: false`) for noisy branches.
-- [ ] Optional DM to the pusher when their deployment blocks promotion.
+## 6. Multi-tenant Slack (required before customers can install it)
+
+Current wiring is single-workspace: one bot token and one channel from env.
+Message builders and the event-bus subscription are tenant-agnostic; only
+the token/channel source changes.
+
+- [ ] Slack OAuth v2 install flow (`/slack/install`, `/slack/oauth/callback`)
+      storing `{ teamId, botToken, botUserId, installedBy }` per workspace.
+      Note this is inbound (Slack redirects to the callback), so it also
+      needs a public URL.
+- [ ] Link a Slack workspace to a tenant (GitHub installation).
+- [ ] `Stage.slackChannelId?` chosen in the web UI; notifier resolves
+      `{ token, channel }` from the run's repository. Cache `WebClient` per
+      token.
+- [ ] Keep the env-var path as single-workspace mode for self-hosted/local.
+- [ ] Handle `tokens_revoked` / `app_uninstalled` (Events API).
 
 ## 7. Hardening
 
-- [ ] Rate-limit handling: `@slack/web-api` retries 429s by default, but a
-      burst of deployments across many repos could still queue. Confirm the
-      default `retryConfig` is acceptable or set an explicit one.
-- [ ] Slash commands from channels the bot is not in: `chat.postMessage` to
-      `SLACK_CHANNEL_ID` still works, but the ephemeral ack goes to the
-      invoking channel. Decide whether `/qa run` should only be allowed from
-      the notification channel.
-- [ ] `/qa` currently accepts any workspace member. Add a Slack user allowlist
-      or group check for `run` (and later `override`) once auth exists.
-- [ ] Tests: the smoke script was throwaway. Turn it into
-      `src/slack/*.test.ts` (signature verification, command parsing,
-      notifier threading) and restore the `test` script in `package.json`.
+- [ ] Confirm `@slack/web-api` default 429 retry config is acceptable.
+- [ ] Per-stage mute (`notify: false`) for noisy branches.
+- [ ] Tests: turn the smoke script into `src/slack/*.test.ts` (report
+      rendering, escaping, failure report, notifier error isolation) and
+      restore the `test` script in `package.json`.
 
 ## 8. Documentation
 
-- [ ] Add a "Slack" section to the root `README.md` mirroring the control
-      plane setup steps.
-- [ ] Note in `project-context.md` that Slack is a subscriber to the run
-      event bus, not a caller into run logic, so future sinks (email,
-      PagerDuty, PR comments) follow the same pattern.
+- [ ] Add a "Slack" section to the root `README.md` with the four setup
+      steps from section 1.

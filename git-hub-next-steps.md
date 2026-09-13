@@ -174,6 +174,6 @@ The check run only completes when something calls `completeRun`. That is the
 orchestrator + triage judge, which do not exist. Until then the check stays
 in progress forever and branch protection will block every promotion. For
 demos, call `POST /api/runs/:id/findings` and then `POST /api/runs/:id/complete`
-by hand (counts are derived from stored findings when omitted), or use the
-Slack `/qa` command. To demo the UI with no App at all, use the dev seed
+by hand (counts are derived from stored findings when omitted). To demo the
+UI with no App at all, use the dev seed
 (`DEV_SEED=true`, `pnpm --filter @qa-agent/web seed`).
