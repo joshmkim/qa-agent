@@ -97,7 +97,7 @@ it still points at that base.
 `Store` interface in `src/store/index.ts` is the seam.
 
 - [ ] Postgres implementation. Tables: installations, repositories, stages,
-      runs, findings, webhook_deliveries. `advanceCursor` becomes
+      runs, findings, manifest_snapshots, webhook_deliveries. `advanceCursor` becomes
       `UPDATE stages SET cursor = $next WHERE id = $id AND cursor->>'sha' = $expected`.
 - [ ] Delivery dedupe with a TTL (the memory version expires after 24h).
 - [ ] On boot, if the store is empty, offer `POST /github/installations/:id/sync`

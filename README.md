@@ -6,7 +6,9 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 
 - `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
 - `packages/shared-types` – the two real contracts (`ContextBundle`, `Finding`) plus control-plane data shapes (`Pipeline`, `Stage`, `Run`).
-- `packages/control-plane` – GitHub App, webhooks, cursors/diff, check runs, HTTP API. Orchestrator not started. See "Control plane" below.
+- `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API. Orchestrator not started. See "Control plane" below.
+
+The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md).
 
 ## Getting started
 
