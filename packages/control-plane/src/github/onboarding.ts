@@ -75,6 +75,18 @@ export function githubOnboarding(deps: OnboardingDeps): Hono {
    */
   app.post("/installations/:id/sync", async (c) => {
     const installationId = Number(c.req.param("id"));
+    // Record the installation too, in case its installation.created webhook was missed.
+    if (!(await store.getInstallation(installationId))) {
+      const { data } = await github.octokit.rest.apps.getInstallation({ installation_id: installationId });
+      await store.upsertInstallation({
+        installationId: data.id,
+        accountLogin: accountLogin(data.account),
+        accountType: accountType(data.account),
+        repositorySelection: data.repository_selection,
+        suspended: data.suspended_at != null,
+        installedAt: data.created_at,
+      });
+    }
     const octokit = await github.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.rest.apps.listReposAccessibleToInstallation, {
       per_page: 100,
