@@ -56,4 +56,4 @@ curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta/cursor \
 
 The next push to `beta` starts a run and posts an in-progress "Agentic QA Fleet" check on the head commit. CI can trigger explicitly with `POST /api/runs {"repository":"owner/repo","stage":"beta"}`, and the orchestrator reports back via `POST /api/runs/:id/complete` or `/fail`.
 
-Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs), `/slack/*` (optional bot). Only the webhook route is authenticated today.
+Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs). Only the webhook route is authenticated today. Slack reporting is outbound only (no routes); set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to enable it.

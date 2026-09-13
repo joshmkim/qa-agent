@@ -121,7 +121,8 @@ Layout:
 - `src/runs/service.ts` `RunService`: `detectDeployment`, `startRun`,
   `completeRun`, `failRun`, `resolveStage`, `branchHead`.
 - `src/api.ts` `/api/*` management routes (stages, cursors, runs).
-- `src/slack/` optional bot: notifications on events, `/qa` slash command.
+- `src/slack/` optional, outbound only: posts a report to a channel on
+  `run.finished`. No inbound routes, so no public URL is needed for Slack.
 - `src/store/` `Store` interface + `MemoryStore`.
 
 HTTP API (only /webhooks/github is authenticated; everything else needs auth
@@ -135,7 +136,6 @@ HTTP API (only /webhooks/github is authenticated; everything else needs auth
   `PUT /api/repositories/:owner/:repo/stages/:stage/cursor`
 - `POST /api/runs` (CI override; body `{repository, stage, sha?}`),
   `GET /api/runs/:id`, `POST /api/runs/:id/complete`, `POST /api/runs/:id/fail`
-- `/slack/commands`, `/slack/interactions` when Slack is configured
 
 Onboarding flow for an external repo: user hits `/github/install` -> GitHub
 install page -> picks org + repos -> `installation.created` webhook records
@@ -154,7 +154,9 @@ Deferred / known gaps:
 - PR enrichment is one REST call per commit + one per PR; switch to GraphQL
   `associatedPullRequests` if rate limits bite on large windows.
 - No auth on management routes; no user login / tenant scoping yet.
-- `Stage.autoRun` was added to shared-types for the Slack "run on demand"
-  flow.
+- `Stage.autoRun` (default true) lets a stage announce deployments without
+  starting a run; a run is then started via `POST /api/runs`. Slack kickoff
+  (slash command + button) was built and then cut from the MVP because it
+  needs Slack to reach a public URL; see slack-next-steps.md.
 - Local runtime is Node 18, so `@slack/web-api` is pinned to 7.x (8.x needs
   Node 20), same reason as the Octokit pins.

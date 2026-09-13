@@ -1,14 +1,6 @@
 import type { KnownBlock } from "@slack/web-api";
 import type { ChangeContext, Repository, Run, Stage } from "@qa-agent/shared-types";
 
-/** Slack action_id for the "Run QA fleet" button on a deployment message. */
-export const RUN_QA_ACTION = "run_qa";
-
-export interface RunQaButtonValue {
-  stageId: string;
-  headSha: string;
-}
-
 /** Slack truncates long messages; keep the PR list bounded. */
 const MAX_PRS_LISTED = 10;
 
@@ -19,13 +11,15 @@ export interface SlackMessage {
 }
 
 const short = (sha: string) => sha.slice(0, 7);
-
-function commitUrl(repo: Repository, sha: string): string {
-  return `${repo.url}/commit/${sha}`;
-}
+const plural = (n: number) => (n === 1 ? "" : "s");
 
 function compareUrl(repo: Repository, change: ChangeContext): string {
   return `${repo.url}/compare/${change.baseSha}...${change.headSha}`;
+}
+
+/** Slack mrkdwn treats &, <, > as control characters. */
+function escape(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function prList(change: ChangeContext): string {
@@ -50,13 +44,6 @@ function changeSummary(repo: Repository, change: ChangeContext): string {
   );
 }
 
-const plural = (n: number) => (n === 1 ? "" : "s");
-
-/** Slack mrkdwn treats &, <, > as control characters. */
-function escape(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
 function section(text: string): KnownBlock {
   return { type: "section", text: { type: "mrkdwn", text } };
 }
@@ -67,81 +54,6 @@ function context(text: string): KnownBlock {
 
 function header(text: string): KnownBlock {
   return { type: "header", text: { type: "plain_text", text, emoji: true } };
-}
-
-/**
- * Posted when a push lands on a stage branch. If the stage auto-runs, the
- * "run started" update replaces this; otherwise it carries a kickoff button.
- */
-export function deploymentMessage(input: {
-  repository: Repository;
-  stage: Stage;
-  headSha: string;
-  change: ChangeContext;
-  source: string;
-  autoRun: boolean;
-}): SlackMessage {
-  const { repository, stage, headSha, change, source, autoRun } = input;
-  const title = `New deployment: ${repository.fullName} → ${stage.name}`;
-  const value: RunQaButtonValue = { stageId: stage.id, headSha };
-
-  const blocks: KnownBlock[] = [
-    header(`🚀 ${title}`),
-    section(changeSummary(repository, change)),
-    section(prList(change)),
-    context(
-      `Head <${commitUrl(repository, headSha)}|\`${short(headSha)}\`> on \`${stage.branch}\` · pushed by ${escape(source)}` +
-        (stage.environmentUrl ? ` · <${stage.environmentUrl}|open ${stage.name}>` : ""),
-    ),
-  ];
-
-  if (autoRun) {
-    blocks.push(context("⏳ Starting QA fleet…"));
-  } else {
-    blocks.push({
-      type: "actions",
-      elements: [
-        {
-          type: "button",
-          action_id: RUN_QA_ACTION,
-          text: { type: "plain_text", text: `Run QA fleet (${stage.fleetSize} agents)`, emoji: true },
-          style: "primary",
-          value: JSON.stringify(value),
-        },
-      ],
-    });
-  }
-
-  return { text: title, blocks };
-}
-
-/** Replaces the deployment message (or stands alone for manual triggers). */
-export function runStartedMessage(input: {
-  repository: Repository;
-  stage: Stage;
-  run: Run;
-  runUrl: string;
-}): SlackMessage {
-  const { repository, stage, run, runUrl } = input;
-  const who = run.triggeredBy ? escape(run.triggeredBy) : run.trigger;
-  const how =
-    run.trigger === "push-webhook"
-      ? `auto-started on deployment by ${who}`
-      : `started by ${who}`;
-  const title = `QA run #${run.number} started: ${repository.fullName} → ${stage.name}`;
-
-  return {
-    text: title,
-    blocks: [
-      header(`🧪 ${title}`),
-      section(changeSummary(repository, run.change)),
-      section(prList(run.change)),
-      context(
-        `${run.fleet.agentsRequested} agents · ${how} · <${runUrl}|view run>` +
-          (stage.environmentUrl ? ` · <${stage.environmentUrl}|open ${stage.name}>` : ""),
-      ),
-    ],
-  };
 }
 
 const VERDICT_EMOJI: Record<Run["verdict"], string> = {
@@ -163,7 +75,7 @@ function durationLabel(run: Run): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-/** Posted in the thread of the run's start message when the fleet finishes. */
+/** Posted to the channel when the fleet finishes (verdict or infra failure). */
 export function runReportMessage(input: {
   repository: Repository;
   stage: Stage;
@@ -180,6 +92,7 @@ export function runReportMessage(input: {
       blocks: [
         header(`💥 ${title}`),
         section(`The fleet hit an infrastructure error and produced no verdict.\n\`\`\`${escape(reason)}\`\`\``),
+        section(changeSummary(repository, run.change)),
         context(`<${runUrl}|view run>`),
       ],
     };
@@ -214,17 +127,23 @@ export function runReportMessage(input: {
       },
       {
         type: "mrkdwn",
-        text: `*Fleet*\n${run.fleet.agentsCompleted}/${run.fleet.agentsRequested} agents completed` +
+        text:
+          `*Fleet*\n${run.fleet.agentsCompleted}/${run.fleet.agentsRequested} agents completed` +
           (run.fleet.agentsFailed ? `, ${run.fleet.agentsFailed} failed` : "") +
           `\n${run.fleet.totalActions} actions`,
       },
       {
         type: "mrkdwn",
-        text: `*Gate*\n${run.verdict === "block" ? "Promotion blocked" : run.verdict === "override" ? "Overridden" : "Promotion allowed"}` +
+        text:
+          `*Gate*\n${run.verdict === "block" ? "Promotion blocked" : run.verdict === "override" ? "Overridden" : "Promotion allowed"}` +
           (durationLabel(run) ? `\n${durationLabel(run)}` : ""),
       },
     ],
   });
+
+  // What was under test: the PRs in this deployment window.
+  blocks.push(section(changeSummary(repository, run.change)));
+  blocks.push(section(prList(run.change)));
 
   blocks.push({
     type: "actions",
@@ -245,27 +164,13 @@ export function runReportMessage(input: {
     ],
   });
 
+  const who = run.triggeredBy ? escape(run.triggeredBy) : run.trigger;
+  blocks.push(
+    context(
+      `Triggered via ${run.trigger} by ${who}` +
+        (stage.environmentUrl ? ` · <${stage.environmentUrl}|open ${stage.name}>` : ""),
+    ),
+  );
+
   return { text: title, blocks };
-}
-
-/** Ephemeral status reply for `/qa status`. */
-export function stageStatusText(input: {
-  repository: Repository;
-  stage: Stage;
-  latest?: Run;
-  runUrl?: string;
-}): string {
-  const { repository, stage, latest, runUrl } = input;
-  const head = `*${repository.fullName} → ${stage.name}* (\`${stage.branch}\`)`;
-  const cursor = stage.cursor
-    ? `cursor \`${short(stage.cursor.sha)}\`${stage.cursor.prNumber ? ` (PR #${stage.cursor.prNumber})` : ""}`
-    : "no cursor seeded";
-  if (!latest) return `${head}\n${cursor} · no runs yet`;
-
-  const state =
-    latest.verdict === "pending"
-      ? `${VERDICT_EMOJI.pending} run #${latest.number} ${latest.status}`
-      : `${VERDICT_EMOJI[latest.verdict]} run #${latest.number} ${latest.verdict}` +
-        ` · ${latest.findings.total} finding${plural(latest.findings.total)}`;
-  return `${head}\n${cursor} · ${state}${runUrl ? ` · <${runUrl}|view>` : ""}`;
 }

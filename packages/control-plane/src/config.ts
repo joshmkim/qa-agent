@@ -14,9 +14,7 @@ export interface GitHubConfig {
 export interface SlackConfig {
   /** Bot user OAuth token (xoxb-...). */
   botToken: string;
-  /** Used to verify slash command / interaction requests. */
-  signingSecret: string;
-  /** Channel that receives deployment and run notifications. */
+  /** Channel that receives run reports. */
   channelId: string;
 }
 
@@ -59,7 +57,6 @@ function loadSlack(env: NodeJS.ProcessEnv): SlackConfig | undefined {
   if (!botToken || botToken.trim() === "") return undefined;
   return {
     botToken,
-    signingSecret: required("SLACK_SIGNING_SECRET"),
     channelId: required("SLACK_CHANNEL_ID"),
   };
 }

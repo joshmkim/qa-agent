@@ -28,9 +28,8 @@ app.route("/github", githubOnboarding({ github, store, config: config.github }))
 app.route("/api", apiRoutes({ store, runs }));
 
 if (config.slack) {
-  const slack = createSlackIntegration({ config: config.slack, events, runs, store, runUrl });
-  app.route("/slack", slack.routes);
-  console.log(`[slack] enabled; notifying channel ${config.slack.channelId}`);
+  createSlackIntegration({ config: config.slack, events, runUrl });
+  console.log(`[slack] enabled; run reports go to channel ${config.slack.channelId}`);
 } else {
   console.log("[slack] disabled (SLACK_BOT_TOKEN not set)");
 }
