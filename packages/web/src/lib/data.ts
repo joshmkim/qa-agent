@@ -31,6 +31,3 @@ export const {
   resetFleetSettings,
   FleetSettingsError,
 } = source;
-
-/** True when pages read from a control plane (writes like "Trigger run" are possible). */
-export const canWrite = useApi;
