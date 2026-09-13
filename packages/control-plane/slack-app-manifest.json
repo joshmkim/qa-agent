@@ -1,0 +1,23 @@
+{
+  "display_information": {
+    "name": "Agentic QA Fleet",
+    "description": "Posts QA fleet run reports when agents finish",
+    "background_color": "#1f2937"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "QA Fleet",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": ["chat:write"]
+    }
+  },
+  "settings": {
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
