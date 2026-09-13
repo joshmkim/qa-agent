@@ -53,7 +53,7 @@ export interface ChangeContext {
 
 export type SurfaceKind = "page" | "form" | "button" | "endpoint" | "flow";
 
-/** One entry in the team-owned QA manifest surface inventory. */
+/** One entry in the team-owned code primitives surface inventory. */
 export interface Surface {
   id: string;
   kind: SurfaceKind;
@@ -96,7 +96,7 @@ export type ManifestStatus =
   | "invalid" // file exists but failed validation
   | "error"; // could not be fetched (GitHub error)
 
-/** The QA manifest as read from a repo at one commit. */
+/** The code primitives (.qa/manifest.yaml) as read from a repo at one commit. */
 export interface ManifestSnapshot {
   path: string;
   commitSha: string;

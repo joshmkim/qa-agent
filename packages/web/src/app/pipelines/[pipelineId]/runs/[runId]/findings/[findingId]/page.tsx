@@ -24,7 +24,7 @@ export default async function FindingPage({
   const { pipelineId, runId, findingId } = await params;
   const [pipeline, run, finding] = await Promise.all([getPipeline(pipelineId), getRun(runId), getFinding(findingId)]);
   if (!pipeline || !run || !finding || finding.runId !== run.id) notFound();
-  // Look up against the manifest this run used, not whatever is on the branch now.
+  // Look up against the code primitives this run used, not whatever is on the branch now.
   const product = (await getRunManifest(run.id))?.product;
   const surface = product?.surfaces.find((s) => s.id === finding.surfaceId);
   const invariant = finding.invariantId ? product?.invariants.find((i) => i.id === finding.invariantId) : undefined;

@@ -83,7 +83,7 @@ async function main() {
     persona: {
       id: "persona_local",
       name: { methodical: "Methodical Maya", "chaos-monkey": "Chaos Kai", "adversarial-fuzzer": "Fuzzer Fatima", "impatient-user": "Impatient Ivan" }[disposition] ?? "Tester",
-      description: "Hand-launched agent exploring a real environment from the repo's QA manifest.",
+      description: "Hand-launched agent exploring a real environment from the repo's code primitives.",
       disposition,
       focusAreas: focus,
     },
@@ -119,7 +119,7 @@ async function main() {
       stakeholders: m.product.stakeholders ?? [],
       surfaces,
       invariants,
-      manifestVersion: `manifest v${m.version} (${manifestPath})`,
+      manifestVersion: `code primitives v${m.version} (${manifestPath})`,
     },
     environment: {
       stageName: arg("stage") ?? "beta",

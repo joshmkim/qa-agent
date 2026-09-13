@@ -50,9 +50,16 @@ export class JiraReporter {
     const findings = this.fileable(await this.deps.store.listFindings(e.run.id));
     if (findings.length === 0) return;
 
+    // Resolved once per run, not once per finding: it's the same answer for
+    // every finding in this batch, and a board/sprint lookup is not free.
+    const sprintId = await this.deps.client.findActiveSprintId().catch((err) => {
+      console.error("[jira] could not resolve the active sprint; new issues will land in the backlog:", describe(err));
+      return undefined;
+    });
+
     for (const finding of findings) {
       try {
-        await this.fileFinding(finding, e);
+        await this.fileFinding(finding, e, sprintId);
       } catch (err) {
         // One bad finding must not stop the rest, and must never fail the run.
         console.error(`[jira] could not file finding ${finding.id}:`, describe(err));
@@ -60,13 +67,15 @@ export class JiraReporter {
     }
   }
 
-  private async fileFinding(finding: Finding, e: RunFinished): Promise<void> {
+  private async fileFinding(finding: Finding, e: RunFinished, sprintId: number | undefined): Promise<void> {
     const { client, store, config, runUrl } = this.deps;
     const runLink = runUrl(e.run);
     const findingUrl = `${runLink}/findings/${finding.id}`;
 
     const existing = await client.findIssueByLabel(dedupeLabel(finding));
     if (existing) {
+      // Already triaged once (someone may have moved, assigned, or started
+      // it); a recurrence shouldn't yank it back onto the current sprint.
       await client.addComment(existing, recurrenceComment({ run: e.run, runUrl: runLink, findingUrl }));
       await this.record(finding, existing, `${config.baseUrl}/browse/${existing}`, store);
       console.log(`[jira] ${existing} still reproducing (finding ${finding.id})`);
@@ -84,15 +93,34 @@ export class JiraReporter {
         config,
       }),
     );
-    await this.record(finding, created.key, created.url, store);
+    const tracked = await this.record(finding, created.key, created.url, store);
     console.log(`[jira] filed ${created.key} for ${finding.severity} finding ${finding.id}`);
+
+    if (sprintId !== undefined) {
+      try {
+        await client.addToSprint(created.key, sprintId);
+        console.log(`[jira] added ${created.key} to the active sprint`);
+      } catch (err) {
+        // The issue is already filed and linked; a board placement failure
+        // just leaves it in the backlog, which is where it would have
+        // started anyway before this feature existed.
+        console.error(`[jira] could not add ${created.key} to the active sprint:`, describe(err));
+      }
+    }
+
+    // Only for a genuinely new issue, not a recurrence comment on one filed
+    // earlier — other sinks (Slack today) shouldn't re-announce a repeat.
+    this.deps.events.emit("finding.tracked", { repository: e.repository, stage: e.stage, run: e.run, finding: tracked });
   }
 
-  /** Persist the issue link back onto the finding so the UI can show it. */
-  private async record(finding: Finding, key: string, url: string, store: Store): Promise<void> {
-    await store.saveFindings(finding.runId, [
-      { ...finding, trackedIssue: { provider: "jira", key, url, filedAt: new Date().toISOString() } },
-    ]);
+  /** Persist the issue link back onto the finding so the UI can show it, and return the updated finding. */
+  private async record(finding: Finding, key: string, url: string, store: Store): Promise<Finding> {
+    const tracked: Finding = {
+      ...finding,
+      trackedIssue: { provider: "jira", key, url, filedAt: new Date().toISOString() },
+    };
+    await store.saveFindings(finding.runId, [tracked]);
+    return tracked;
   }
 }
 

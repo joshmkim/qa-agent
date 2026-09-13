@@ -1,5 +1,5 @@
 import type { KnownBlock } from "@slack/web-api";
-import type { ChangeContext, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { ChangeContext, Finding, Repository, Run, Severity, Stage } from "@qa-agent/shared-types";
 
 /** Slack truncates long messages; keep the PR list bounded. */
 const MAX_PRS_LISTED = 10;
@@ -201,4 +201,44 @@ export function runReportMessage(input: {
   );
 
   return { text: title, blocks };
+}
+
+const SEVERITY_EMOJI: Record<Severity, string> = {
+  P0: "🔴",
+  P1: "🟠",
+  P2: "🟡",
+  P3: "⚪",
+};
+
+/**
+ * Posted once per finding the first time it becomes a tracker issue (not on
+ * a recurrence, which only comments on the existing issue). Provider-agnostic
+ * message shape; `finding.trackedIssue` names which tracker actually filed it.
+ */
+export function findingTrackedMessage(input: {
+  repository: Repository;
+  stage: Stage;
+  run: Run;
+  finding: Finding;
+  runUrl: string;
+  findingUrl: string;
+}): SlackMessage {
+  const { repository, stage, run, finding, runUrl, findingUrl } = input;
+  const issue = finding.trackedIssue;
+  if (!issue) {
+    throw new Error(`findingTrackedMessage called for finding ${finding.id} with no trackedIssue set`);
+  }
+
+  const title = `${issue.key} filed: ${finding.title}`;
+  return {
+    text: title,
+    blocks: [
+      header(`${SEVERITY_EMOJI[finding.severity]} New issue filed`),
+      section(`*<${issue.url}|${issue.key}>* — ${escape(finding.title)}`),
+      context(
+        `Surface \`${finding.surfaceId}\` · QA run <${runUrl}|#${run.number}> on ` +
+          `\`${stage.branch}\` (${repository.fullName}) · <${findingUrl}|view finding>`,
+      ),
+    ],
+  };
 }

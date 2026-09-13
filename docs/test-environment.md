@@ -9,7 +9,7 @@ What the QA fleet explores. Set up 2026-09-13.
 | Hosting | Vercel project `trent-kobieluszs-projects/nike-storefront`, git-connected; preview deployment protection is **off** so agents can reach it |
 | Database | Supabase project `nike-storefront` (`zhwvnmsrtckennjphywu`), used only by this environment |
 | Test shoppers | `qa-shopper-01..10@example.com`; credentials in `~/.config/qa-agent/nike-storefront-beta-shoppers.json` (never committed). Stage `credentialsRef`: `file://~/.config/qa-agent/nike-storefront-beta-shoppers.json` |
-| Manifest | `.qa/manifest.yaml` in the storefront repo |
+| Code primitives | `.qa/manifest.yaml` in the storefront repo |
 
 Agents get all of this from `GET /api/runs/:id/context` (`environment.baseUrl`,
 `environment.credentialsRef`, `environment.blastRadiusBoundaries`).

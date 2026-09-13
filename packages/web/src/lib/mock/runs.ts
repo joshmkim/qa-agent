@@ -6,7 +6,7 @@ const doneSteps = (start: string, offsetsMin: number[]): RunStep[] => {
   const at = (m: number) => new Date(t0 + m * 60_000).toISOString();
   return [
     { id: "st_deploy", name: "Deployment detected", status: "succeeded", startedAt: at(0), finishedAt: at(0), detail: "push webhook on stage branch" },
-    { id: "st_context", name: "Assemble context", status: "succeeded", startedAt: at(0), finishedAt: at(offsetsMin[0]), detail: "diff + PR enrichment + manifest" },
+    { id: "st_context", name: "Assemble context", status: "succeeded", startedAt: at(0), finishedAt: at(offsetsMin[0]), detail: "diff + PR enrichment + code primitives" },
     { id: "st_fleet", name: "Fleet exploration", status: "succeeded", startedAt: at(offsetsMin[0]), finishedAt: at(offsetsMin[1]) },
     { id: "st_triage", name: "Triage & reproduce", status: "succeeded", startedAt: at(offsetsMin[1]), finishedAt: at(offsetsMin[2]) },
     { id: "st_gate", name: "Publish check run", status: "succeeded", startedAt: at(offsetsMin[2]), finishedAt: at(offsetsMin[2] + 1) },

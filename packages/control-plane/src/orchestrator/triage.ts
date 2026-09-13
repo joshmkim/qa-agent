@@ -184,7 +184,7 @@ export function writeConfidenceStatement(
   } else if (coverage.surfacesTotal > 0) {
     parts.push(`${coverage.surfacesVisited} of ${coverage.surfacesTotal} surfaces (${pct(coverage.surfacesVisited, coverage.surfacesTotal)}) covered by ${agents}; no surface was mapped to the change.`);
   } else {
-    parts.push(`No QA manifest, so coverage is unmeasured: ${agents}, ${visited.size} self-reported surfaces visited.`);
+    parts.push(`No code primitives, so coverage is unmeasured: ${agents}, ${visited.size} self-reported surfaces visited.`);
   }
   if (coverage.invariantsTotal > 0) parts.push(`${coverage.invariantsChecked} of ${coverage.invariantsTotal} invariants checked.`);
 
