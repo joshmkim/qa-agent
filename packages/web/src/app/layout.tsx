@@ -6,7 +6,7 @@ import { TopNav } from "@/components/top-nav";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Agentic QA",
+  title: "BMOBot",
   description: "Fleet-driven QA gate for pre-production pipelines",
 };
 

@@ -7,9 +7,9 @@ export function TopNav() {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2 text-[14px] font-medium text-text hover:no-underline">
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-[6px] bg-text text-[12px] font-medium text-text-inverted">
-              QA
+              B
             </span>
-            Agentic QA
+            BMOBot
           </Link>
           <nav className="flex items-center gap-1 text-[14px]">
             <Link href="/" className="rounded-[6px] px-2 py-1 text-text hover:bg-nav-hover hover:no-underline">

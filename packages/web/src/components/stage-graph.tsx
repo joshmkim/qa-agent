@@ -106,7 +106,7 @@ export async function StageColumn({
             <>
               <div className="flex flex-wrap items-center gap-1.5 text-[14px]">
                 <Link href={runHref!} className="font-medium text-link">
-                  Agentic QA
+                  BMOBot
                 </Link>
                 <span className="text-border-strong">·</span>
                 <span className="mono text-link">{shortSha(run.change.headSha)}</span>

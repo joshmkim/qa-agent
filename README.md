@@ -1,10 +1,10 @@
-# Agentic QA Fleet
+# BMOBot
 
 Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for the vision and architecture.
 
 ## 01 · Project overview
 
-Manual QA on preprod environments exists because integration tests can't cover every edge case — but it doesn't scale. Agentic QA Fleet replaces that manual pass with a fleet of Claude-powered agents that explore a real deployed environment like human testers and gate promotion on what they find. It connects to a repository's GitHub deployments, computes exactly what changed since the last promotion, spins up a fleet of agents (Playwright + Claude, one persona each — methodical, chaos-monkey, adversarial-fuzzer, impatient-user) against the live stage environment, dedupes and triages their findings with a judge that blocks promotion on any P0, and reports through GitHub Checks, Slack, and Jira. A Next.js dashboard shows the pipeline as a stage graph with per-stage agent confidence, findings by severity, and drill-down into individual findings with replayable reproduction steps.
+Manual QA on preprod environments exists because integration tests can't cover every edge case — but it doesn't scale. BMOBot replaces that manual pass with a fleet of Claude-powered agents that explore a real deployed environment like human testers and gate promotion on what they find. It connects to a repository's GitHub deployments, computes exactly what changed since the last promotion, spins up a fleet of agents (Playwright + Claude, one persona each — methodical, chaos-monkey, adversarial-fuzzer, impatient-user) against the live stage environment, dedupes and triages their findings with a judge that blocks promotion on any P0, and reports through GitHub Checks, Slack, and Jira. A Next.js dashboard shows the pipeline as a stage graph with per-stage agent confidence, findings by severity, and drill-down into individual findings with replayable reproduction steps.
 
 Verified so far: a single hand-run agent against a live deployed storefront found 2 real bugs (an advertised discount code rejected at checkout, and a sale badge with no backing discount). A full orchestrated multi-agent run through the control plane end-to-end is the next verification step — see Reliability testing.
 
