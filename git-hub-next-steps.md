@@ -37,9 +37,10 @@ Things likely to surface here that the smoke test could not:
 - `installation.created` payload shape for `account` on org vs user installs.
 - Compare API behavior on the first real branch-promotion merge (expect
   `diverged`, expect merge-base fallback to kick in).
-- Check run `details_url` currently points at `WEB_URL/pipelines/<repoId>/runs/<runId>`;
-  the web package uses pipeline ids like `pl_storefront`, so that URL shape
-  needs to be reconciled with whatever the web routes actually are.
+- Check run `details_url` points at `WEB_URL/pipelines/<repoId>/runs/<runId>`.
+  The web now uses the repository id as the pipeline id, so this resolves when
+  the web runs against the control-plane (`CONTROL_PLANE_URL` set). Confirm
+  the link from a real check run.
 
 ## 2. Decide the failed-compare behavior
 
@@ -61,7 +62,7 @@ once the web UI can display failed runs; until then the first is fine.
 `Store` interface in `src/store/index.ts` is the seam.
 
 - [ ] Postgres implementation. Tables: installations, repositories, stages,
-      runs, webhook_deliveries. `advanceCursor` becomes
+      runs, findings, webhook_deliveries. `advanceCursor` becomes
       `UPDATE stages SET cursor = $next WHERE id = $id AND cursor->>'sha' = $expected`.
 - [ ] Delivery dedupe with a TTL (the memory version expires after 24h).
 - [ ] On boot, if the store is empty, offer `POST /github/installations/:id/sync`
@@ -110,11 +111,11 @@ Handlers are fire-and-forget in process. Fine for one instance, wrong for two.
 
 ## 7. Wire the check run into the web UI
 
-- [ ] `details_url` must resolve to a page. Align `runUrl` in `index.ts`
-      with the web package's actual route for a run.
-- [ ] Web `src/lib/data.ts` currently returns mock data; point it at
-      `GET /api/runs/:id` and a new `GET /api/repositories/:owner/:repo/runs`
-      (does not exist yet; add to `api.ts`).
+- [x] `details_url` must resolve to a page. Pipeline id is now the repository
+      id on both sides (`control-plane/src/pipelines.ts`), matching `runUrl`.
+- [x] Web `src/lib/data.ts` reads from the control-plane when
+      `CONTROL_PLANE_URL` is set (`GET /api/pipelines/...`, `/api/runs/:id`,
+      findings routes). See `pipeline-steps.MD`.
 
 ## 8. GHES
 
@@ -124,8 +125,9 @@ the App is created on the GHES instance, not github.com.
 
 ## 9. Runtime
 
-Local dev is Node 18.20. Octokit and `@slack/web-api` are pinned to the last
-majors that support it. Once the deploy target is Node 20+, bump
+Octokit and `@slack/web-api` are pinned to the last majors that support
+Node 18.20. The dev machine now runs Node 20.19; once the deploy target is
+also Node 20+, bump
 `octokit` to 4.x, `@octokit/app` to 15+/16+, `@slack/web-api` to 8.x, and
 `@hono/node-server` to 2.x, and re-run typecheck (the `App` generic typing in
 `src/github/app.ts` may simplify).
@@ -135,5 +137,7 @@ majors that support it. Once the deploy target is Node 20+, bump
 The check run only completes when something calls `completeRun`. That is the
 orchestrator + triage judge, which do not exist. Until then the check stays
 in progress forever and branch protection will block every promotion. For
-demos, call `POST /api/runs/:id/complete` by hand or from the Slack `/qa`
-command.
+demos, call `POST /api/runs/:id/findings` and then `POST /api/runs/:id/complete`
+by hand (counts are derived from stored findings when omitted), or use the
+Slack `/qa` command. To demo the UI with no App at all, use the dev seed
+(`DEV_SEED=true`, `pnpm --filter @qa-agent/web seed`).
