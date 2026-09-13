@@ -17,7 +17,7 @@ export interface AnthropicModelOptions {
   maxTokens?: number;
 }
 
-export const DEFAULT_MODEL = "claude-sonnet-4-5";
+export const DEFAULT_MODEL = "claude-sonnet-4-6";
 
 /**
  * Anthropic Messages API adapter. To run on Bedrock instead, construct the

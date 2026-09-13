@@ -192,7 +192,7 @@ Agent (`packages/agent/src`):
   exception -> P2, dead request -> P3) on the surface guessed from the URL,
   so they are findings even if the model ignores them.
 - `model/` `ModelClient` interface + Anthropic Messages adapter
-  (`@anthropic-ai/sdk`, `AGENT_MODEL`, default claude-sonnet-4-5). Bedrock
+  (`@anthropic-ai/sdk`, `AGENT_MODEL`, default claude-sonnet-4-6). Bedrock
   is the same call shape via `@anthropic-ai/bedrock-sdk`.
 - `index.ts` `runAgent(bundle, opts)`; `cli.ts` runs one from a JSON bundle;
   `scripts/smoke.ts` scripted model vs a local storefront with planted bugs.
