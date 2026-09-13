@@ -1,6 +1,6 @@
 /**
  * Loads the web fixtures into a local control plane started with DEV_SEED=true,
- * plus one in-flight run (beta #48) so polling and findings ingestion have
+ * plus one in-flight run (beta #3) so polling and findings ingestion have
  * something live to act on.
  *
  *   pnpm --filter @qa-agent/web seed
@@ -8,7 +8,7 @@
 import type { Run, Stage } from "@qa-agent/shared-types";
 import { findings } from "../src/lib/mock/findings";
 import { manifestSnapshot, repository, stages } from "../src/lib/mock/pipeline";
-import { runBeta47, runs } from "../src/lib/mock/runs";
+import { runBeta2, runs } from "../src/lib/mock/runs";
 
 const baseUrl = (process.env.CONTROL_PLANE_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -16,17 +16,17 @@ const now = Date.now();
 const minutesAgo = (m: number) => new Date(now - m * 60_000).toISOString();
 const liveHeadSha = "5e1a9c3b7d2f4e6a8b0c1d3e5f7a9b2c4d6e8f01";
 
-const runBeta48: Run = {
-  ...runBeta47,
-  id: "run_beta_48",
-  number: 48,
+const runBeta3: Run = {
+  ...runBeta2,
+  id: "run_beta_3",
+  number: 3,
   status: "exploring",
   verdict: "pending",
   confidenceStatement: undefined,
   confidenceScore: undefined,
   change: {
-    ...runBeta47.change,
-    baseSha: runBeta47.change.headSha,
+    ...runBeta2.change,
+    baseSha: runBeta2.change.headSha,
     headSha: liveHeadSha,
     commitCount: 1,
     filesChanged: 3,
@@ -35,24 +35,24 @@ const runBeta48: Run = {
   steps: [
     { id: "st_deploy", name: "Deployment detected", status: "succeeded", startedAt: minutesAgo(20), finishedAt: minutesAgo(20), detail: "push webhook on stage branch" },
     { id: "st_context", name: "Assemble context", status: "succeeded", startedAt: minutesAgo(20), finishedAt: minutesAgo(18), detail: "diff + PR enrichment + manifest" },
-    { id: "st_fleet", name: "Fleet exploration", status: "running", startedAt: minutesAgo(18) },
+    { id: "st_fleet", name: "Fleet exploration", status: "running", startedAt: minutesAgo(18), detail: "4/10 agents done, 2 raw findings" },
     { id: "st_triage", name: "Triage & reproduce", status: "pending" },
     { id: "st_gate", name: "Publish check run", status: "pending" },
   ],
-  fleet: { ...runBeta47.fleet, agentsCompleted: 37, agentsFailed: 0, totalActions: 6_120 },
+  fleet: { ...runBeta2.fleet, agentsCompleted: 4, agentsFailed: 0, totalActions: 470 },
   findings: { bySeverity: { P0: 0, P1: 0, P2: 0, P3: 0 }, total: 0, duplicatesCollapsed: 0 },
   checkRunId: undefined,
   startedAt: minutesAgo(20),
   finishedAt: undefined,
 };
 
-// The beta cursor advanced when #48 started.
+// The beta cursor advanced when #3 started.
 const seededStages: Stage[] = stages.map((s) =>
-  s.id === runBeta48.stageId ? { ...s, cursor: { sha: liveHeadSha, updatedAt: runBeta48.startedAt } } : s,
+  s.id === runBeta3.stageId ? { ...s, cursor: { sha: liveHeadSha, updatedAt: runBeta3.startedAt } } : s,
 );
 
 // Every fixture run used the fixture manifest at its own head commit.
-const allRuns = [...runs, runBeta48].map((run) => ({
+const allRuns = [...runs, runBeta3].map((run) => ({
   ...run,
   manifest: {
     path: manifestSnapshot.path,

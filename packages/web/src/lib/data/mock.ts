@@ -55,3 +55,8 @@ export async function getPipelineManifest(pipelineId: string): Promise<ManifestS
 export async function getRunManifest(runId: string): Promise<ManifestSnapshot | undefined> {
   return runs.some((r) => r.id === runId) ? manifestSnapshot : undefined;
 }
+
+/** Fixtures are read-only; runs can only be started against a control plane. */
+export async function triggerRun(_repositoryFullName: string, stageName: string): Promise<Run> {
+  throw new Error(`Cannot start a run on "${stageName}" with fixture data. Start the web with CONTROL_PLANE_URL set.`);
+}

@@ -31,7 +31,14 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
             </div>
           </KeyValue>
           <KeyValue label="Webhook">
-            <StatusIndicator tone="success">Verified (HMAC-SHA256)</StatusIndicator>
+            {pipeline.stages.some((s) => s.cursor) ? (
+              <StatusIndicator tone="success">Receiving (signature verified)</StatusIndicator>
+            ) : (
+              <StatusIndicator tone="pending">Awaiting first push</StatusIndicator>
+            )}
+            <div className="text-text-secondary text-[12px]">
+              Events: <Code>push</Code> <Code>check_run</Code>
+            </div>
           </KeyValue>
         </KeyValueGrid>
       </Container>
@@ -78,7 +85,15 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
                       "—"
                     )}
                   </td>
-                  <td>{s.fleetSize} agents</td>
+                  <td>
+                    {s.fleetSize > 0 ? (
+                      `${s.fleetSize} agents`
+                    ) : (
+                      <a href="/fleet" className="text-text-secondary">
+                        Fleet default
+                      </a>
+                    )}
+                  </td>
                   <td>
                     {(s.autoRun ?? true) ? (
                       "On deployment"
@@ -116,7 +131,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
             <Code>push</Code> webhook on any stage branch
           </KeyValue>
           <KeyValue label="Override from CI">
-            <Code>POST /api/pipelines/{pipeline.id}/runs</Code> with <Code>{"{ stage, sha }"}</Code>
+            <Code>POST /api/runs</Code> with{" "}
+            <Code>{`{ "repository": "${pipeline.repository.fullName}", "stage": "<stage>", "sha"?: "<sha>" }`}</Code>
           </KeyValue>
         </KeyValueGrid>
       </Container>

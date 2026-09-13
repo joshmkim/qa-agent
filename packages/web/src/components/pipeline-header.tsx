@@ -1,7 +1,9 @@
 import type { Pipeline } from "@qa-agent/shared-types";
 import { Breadcrumbs } from "@/components/breadcrumbs";
 import { Tabs } from "@/components/tabs";
+import { TriggerRunButton } from "@/components/trigger-run-button";
 import { Button, Icons, PageHeader, Pill } from "@/components/ui";
+import { canWrite } from "@/lib/data";
 
 /**
  * Title, repo/manifest meta, actions, and tab strip for a pipeline. Shared by
@@ -39,14 +41,14 @@ export function PipelineHeader({
             <span className="text-text-secondary">
               QA manifest <code className="mono">{pipeline.manifestPath}</code> @ {pipeline.manifestVersion}
             </span>
-            <Pill tone="info">GitHub App installed</Pill>
+            {pipeline.repository.installationId > 0 && (
+              <Pill tone="info">GitHub App · installation {pipeline.repository.installationId}</Pill>
+            )}
           </>
         }
         actions={
           <>
-            <Button disabled title="Coming soon">
-              Trigger run
-            </Button>
+            <TriggerRunButton pipelineId={pipeline.id} stages={pipeline.stages} enabled={canWrite} />
             <Button variant="primary" disabled title="Coming soon">
               Pipeline actions
             </Button>

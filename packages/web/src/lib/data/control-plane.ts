@@ -55,3 +55,22 @@ export async function getPipelineManifest(pipelineId: string): Promise<ManifestS
 export async function getRunManifest(runId: string): Promise<ManifestSnapshot | undefined> {
   return get<ManifestSnapshot>(`/runs/${id(runId)}/manifest`);
 }
+
+/**
+ * Start a run on a stage now, at the current head of its branch. Mirrors the
+ * CI trigger: POST /api/runs { repository, stage, triggeredBy }.
+ */
+export async function triggerRun(repositoryFullName: string, stageName: string, triggeredBy: string): Promise<Run> {
+  const res = await fetch(`${baseUrl}/api/runs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository: repositoryFullName, stage: stageName, triggeredBy }),
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    // The control plane answers RunErrors as { error, message } with 400/404/409.
+    const body = (await res.json().catch(() => undefined)) as { message?: string } | undefined;
+    throw new Error(body?.message ?? `Control plane POST /runs failed: ${res.status}`);
+  }
+  return (await res.json()) as Run;
+}
