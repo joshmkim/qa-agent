@@ -2,6 +2,23 @@
 
 Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for the vision and architecture.
 
+## Demo
+
+[Watch the demo video](https://drive.google.com/file/d/1ST08zXWOqggeYYunO02SEESVar42hP3f/view?usp=sharing): one agent exploring the nike-storefront beta deployment, recorded with `--headed --video`. To reproduce it, build a bundle from the repo's code primitives and run a single agent (the second step sources `packages/control-plane/.env` so the CLI gets `ANTHROPIC_API_KEY` and `ANTHROPIC_WORKSPACE_ID`):
+
+```bash
+pnpm --filter @qa-agent/agent bundle -- \
+  --manifest ~/nike-storefront/.qa/manifest.yaml \
+  --base-url https://nike-storefront-git-beta-trent-kobieluszs-projects.vercel.app \
+  --focus shoe-detail,cart,checkout \
+  --budget 240 \
+  --out /tmp/nike-bundle.json
+
+cd packages/agent
+set -a; source ../control-plane/.env; set +a
+pnpm exec tsx src/cli.ts --bundle /tmp/nike-bundle.json --headed --video --out /tmp/nike-result.json
+```
+
 ## Packages
 
 - `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
