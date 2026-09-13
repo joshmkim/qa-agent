@@ -1,7 +1,11 @@
-import type { DeployCursor, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { DeployCursor, Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
 import type { Installation, Store } from "./index";
 
 const DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
+const SEVERITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 } as const;
+
+const bySeverityThenNewest = (a: Finding, b: Finding) =>
+  SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || b.reportedAt.localeCompare(a.reportedAt);
 
 /** Local-dev store. Not durable; everything is lost on restart. */
 export class MemoryStore implements Store {
@@ -11,6 +15,7 @@ export class MemoryStore implements Store {
   private runs = new Map<string, Run>();
   private runCounters = new Map<string, number>();
   private deliveries = new Map<string, number>();
+  private findings = new Map<string, Finding>();
 
   async upsertInstallation(inst: Installation): Promise<void> {
     this.installations.set(inst.installationId, inst);
@@ -85,6 +90,8 @@ export class MemoryStore implements Store {
 
   async createRun(run: Run): Promise<void> {
     this.runs.set(run.id, run);
+    // Keep numbering monotonic when runs are inserted with an explicit number (dev seed).
+    this.runCounters.set(run.stageId, Math.max(this.runCounters.get(run.stageId) ?? 0, run.number));
     const stage = this.stages.get(run.stageId);
     if (stage) this.stages.set(stage.id, { ...stage, latestRunId: run.id });
   }
@@ -104,10 +111,38 @@ export class MemoryStore implements Store {
       .sort((a, b) => b.number - a.number)
       .slice(0, limit);
   }
+  async listRunsByRepository(
+    repositoryId: string,
+    opts: { stageId?: string; limit?: number } = {},
+  ): Promise<Run[]> {
+    return [...this.runs.values()]
+      .filter((r) => r.repositoryId === repositoryId && (opts.stageId === undefined || r.stageId === opts.stageId))
+      .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+      .slice(0, opts.limit ?? 50);
+  }
   async nextRunNumber(stageId: string): Promise<number> {
     const next = (this.runCounters.get(stageId) ?? 0) + 1;
     this.runCounters.set(stageId, next);
     return next;
+  }
+
+  async saveFindings(runId: string, findings: Finding[]): Promise<void> {
+    for (const f of findings) {
+      if (f.runId !== runId) throw new Error(`Finding ${f.id} belongs to run ${f.runId}, not ${runId}`);
+      this.findings.set(f.id, f);
+    }
+  }
+  async listFindings(runId: string): Promise<Finding[]> {
+    return [...this.findings.values()].filter((f) => f.runId === runId).sort(bySeverityThenNewest);
+  }
+  async listFindingsByRepository(repositoryId: string, limit = 200): Promise<Finding[]> {
+    return [...this.findings.values()]
+      .filter((f) => this.runs.get(f.runId)?.repositoryId === repositoryId)
+      .sort(bySeverityThenNewest)
+      .slice(0, limit);
+  }
+  async getFinding(findingId: string): Promise<Finding | undefined> {
+    return this.findings.get(findingId);
   }
 
   async claimDelivery(deliveryId: string): Promise<boolean> {

@@ -1,4 +1,4 @@
-import type { DeployCursor, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { DeployCursor, Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
 
 /** One tenant: an org or user account that installed the GitHub App. */
 export interface Installation {
@@ -48,7 +48,17 @@ export interface Store {
   updateRun(runId: string, patch: Partial<Run>): Promise<Run>;
   getRun(runId: string): Promise<Run | undefined>;
   listRuns(stageId: string, limit?: number): Promise<Run[]>;
+  /** Runs across every stage of a repository, newest first. */
+  listRunsByRepository(repositoryId: string, opts?: { stageId?: string; limit?: number }): Promise<Run[]>;
   nextRunNumber(stageId: string): Promise<number>;
+
+  // --- findings (written by the orchestrator / triage judge) ---
+  /** Insert or replace findings by id. Every finding must belong to `runId`. */
+  saveFindings(runId: string, findings: Finding[]): Promise<void>;
+  /** Most severe first, then newest. */
+  listFindings(runId: string): Promise<Finding[]>;
+  listFindingsByRepository(repositoryId: string, limit?: number): Promise<Finding[]>;
+  getFinding(findingId: string): Promise<Finding | undefined>;
 
   // --- webhook delivery dedupe ---
   /** Returns true if this delivery id is new (and records it). */
