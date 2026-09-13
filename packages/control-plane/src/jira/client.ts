@@ -77,4 +77,36 @@ export class JiraClient {
   async verifyAccess(): Promise<void> {
     await this.request("GET", `/rest/api/3/project/${encodeURIComponent(this.config.projectKey)}`);
   }
+
+  /**
+   * The active sprint on the project's first board, if any. `undefined`
+   * (not thrown) when the project has no Scrum board, has a Kanban board
+   * (which has no sprints), or is between sprints — all of which just mean
+   * new issues land in the backlog instead of the board, not an error.
+   */
+  async findActiveSprintId(): Promise<number | undefined> {
+    const boards = await this.request<{ values: { id: number }[] }>(
+      "GET",
+      `/rest/agile/1.0/board?projectKeyOrId=${encodeURIComponent(this.config.projectKey)}`,
+    );
+    const boardId = boards.values[0]?.id;
+    if (boardId === undefined) return undefined;
+
+    try {
+      const sprints = await this.request<{ values: { id: number; state: string }[] }>(
+        "GET",
+        `/rest/agile/1.0/board/${boardId}/sprint?state=active`,
+      );
+      return sprints.values[0]?.id;
+    } catch (err) {
+      // Kanban boards 400 with "The board does not support sprints".
+      if (err instanceof JiraError && err.status === 400) return undefined;
+      throw err;
+    }
+  }
+
+  /** Adds an issue to a sprint, moving it from the backlog onto the board. */
+  async addToSprint(issueKey: string, sprintId: number): Promise<void> {
+    await this.request("POST", `/rest/agile/1.0/sprint/${sprintId}/issue`, { issues: [issueKey] });
+  }
 }
