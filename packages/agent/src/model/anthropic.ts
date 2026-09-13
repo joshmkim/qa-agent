@@ -19,6 +19,12 @@ export interface AnthropicModelOptions {
 
 export const DEFAULT_MODEL = "claude-sonnet-4-6";
 
+/** .env files commonly carry `KEY=` placeholders; treat blank as unset. */
+function env(name: string): string | undefined {
+  const v = process.env[name];
+  return v && v.trim() !== "" ? v.trim() : undefined;
+}
+
 /**
  * Anthropic Messages API adapter. To run on Bedrock instead, construct the
  * client from `@anthropic-ai/bedrock-sdk` (same `messages.create` shape) and
@@ -31,15 +37,15 @@ export class AnthropicModelClient implements ModelClient {
   private readonly maxTokens: number;
 
   constructor(opts: AnthropicModelOptions = {}, client?: Anthropic) {
-    this.model = opts.model ?? process.env.AGENT_MODEL ?? DEFAULT_MODEL;
+    this.model = opts.model ?? env("AGENT_MODEL") ?? DEFAULT_MODEL;
     this.maxTokens = opts.maxTokens ?? 2048;
     this.name = `anthropic:${this.model}`;
-    const workspaceId = opts.workspaceId ?? process.env.ANTHROPIC_WORKSPACE_ID;
+    const workspaceId = opts.workspaceId ?? env("ANTHROPIC_WORKSPACE_ID");
     this.client =
       client ??
       new Anthropic({
-        apiKey: opts.apiKey ?? process.env.ANTHROPIC_API_KEY,
-        baseURL: opts.baseURL ?? process.env.ANTHROPIC_BASE_URL,
+        apiKey: opts.apiKey ?? env("ANTHROPIC_API_KEY"),
+        baseURL: opts.baseURL ?? env("ANTHROPIC_BASE_URL"),
         maxRetries: 3,
         ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
       });
