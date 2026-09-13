@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
-import type { Stage } from "@qa-agent/shared-types";
+import type { Finding, Stage } from "@qa-agent/shared-types";
+import { toPipeline } from "./pipelines";
 import { RunError, type CompleteRunInput, type RunService } from "./runs/service";
 import type { Store } from "./store";
 
@@ -18,9 +19,16 @@ const STATUS_FOR: Record<RunError["code"], 400 | 404 | 409> = {
   "cursor-conflict": 409,
 };
 
+/** Parses `?limit=` as a positive integer, ignoring anything else. */
+function parseLimit(raw: string | undefined): number | undefined {
+  const n = Number(raw);
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
 /**
  * Internal JSON API. Consumers are CI (explicit run trigger), the orchestrator
- * (run completion), and setup tooling (stage config + cursor seeding).
+ * (run completion, findings), setup tooling (stage config + cursor seeding),
+ * and the web UI (read routes keyed by id).
  *
  * No authentication yet: bind to a private network or put it behind a gateway
  * before exposing it. Tracked as part of the auth work for the web UI.
@@ -37,7 +45,42 @@ export function apiRoutes(deps: ApiDeps): Hono {
     return c.json({ error: "internal", message: err.message }, 500);
   });
 
+  // --- pipelines (web read path; pipeline id == repository id) ---
+
+  app.get("/pipelines", async (c) => {
+    const repos = await store.listRepositories();
+    return c.json(await Promise.all(repos.map((r) => toPipeline(store, r))));
+  });
+
+  app.get("/pipelines/:id", async (c) => {
+    const repo = await store.getRepository(c.req.param("id"));
+    return repo ? c.json(await toPipeline(store, repo)) : c.json({ error: "repository-not-found" }, 404);
+  });
+
+  /** Query: stage=<stageId>, limit. Newest first. */
+  app.get("/pipelines/:id/runs", async (c) => {
+    const repo = await store.getRepository(c.req.param("id"));
+    if (!repo) return c.json({ error: "repository-not-found" }, 404);
+    return c.json(
+      await store.listRunsByRepository(repo.id, {
+        stageId: c.req.query("stage"),
+        limit: parseLimit(c.req.query("limit")),
+      }),
+    );
+  });
+
+  app.get("/pipelines/:id/findings", async (c) => {
+    const repo = await store.getRepository(c.req.param("id"));
+    if (!repo) return c.json({ error: "repository-not-found" }, 404);
+    return c.json(await store.listFindingsByRepository(repo.id, parseLimit(c.req.query("limit"))));
+  });
+
   // --- stages ---
+
+  app.get("/stages/:id", async (c) => {
+    const stage = await store.getStage(c.req.param("id"));
+    return stage ? c.json(stage) : c.json({ error: "stage-not-found" }, 404);
+  });
 
   app.get("/repositories/:owner/:repo/stages", async (c) => {
     const repo = await store.getRepositoryByFullName(`${c.req.param("owner")}/${c.req.param("repo")}`);
@@ -120,7 +163,31 @@ export function apiRoutes(deps: ApiDeps): Hono {
     return run ? c.json(run) : c.json({ error: "run-not-found" }, 404);
   });
 
-  /** Orchestrator reports the triage verdict. Body: CompleteRunInput. */
+  app.get("/runs/:id/findings", async (c) => {
+    const run = await store.getRun(c.req.param("id"));
+    return run ? c.json(await store.listFindings(run.id)) : c.json({ error: "run-not-found" }, 404);
+  });
+
+  /** Orchestrator / triage judge reports findings. Body: Finding[]. Upserts by finding id. */
+  app.post("/runs/:id/findings", async (c) => {
+    const runId = c.req.param("id");
+    const body = (await c.req.json()) as Finding[];
+    if (!Array.isArray(body)) {
+      return c.json({ error: "bad-request", message: "body must be an array of findings" }, 400);
+    }
+    const foreign = body.find((f) => f.runId !== runId);
+    if (foreign) {
+      return c.json({ error: "bad-request", message: `finding ${foreign.id} has runId ${foreign.runId}, expected ${runId}` }, 400);
+    }
+    return c.json(await runs.addFindings(runId, body), 201);
+  });
+
+  app.get("/findings/:id", async (c) => {
+    const finding = await store.getFinding(c.req.param("id"));
+    return finding ? c.json(finding) : c.json({ error: "finding-not-found" }, 404);
+  });
+
+  /** Orchestrator reports the triage verdict. Body: CompleteRunInput (findings optional). */
   app.post("/runs/:id/complete", async (c) => {
     const body = (await c.req.json()) as CompleteRunInput;
     if (!["pass", "block", "override"].includes(body.verdict)) {

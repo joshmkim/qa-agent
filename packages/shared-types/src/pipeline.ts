@@ -31,6 +31,18 @@ export type RunStatus =
   | "failed" // infra failure, not a QA verdict
   | "cancelled";
 
+/** Statuses where the run is still in flight and can change. */
+export const ACTIVE_RUN_STATUSES: ReadonlySet<RunStatus> = new Set<RunStatus>([
+  "queued",
+  "assembling-context",
+  "exploring",
+  "triaging",
+]);
+
+export function isRunActive(run: Pick<Run, "status">): boolean {
+  return ACTIVE_RUN_STATUSES.has(run.status);
+}
+
 export type GateVerdict = "pending" | "pass" | "block" | "override";
 
 /** A named unit of work inside a run, shown as a step card in the UI. */

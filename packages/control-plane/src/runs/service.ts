@@ -1,13 +1,15 @@
 import { randomUUID } from "node:crypto";
-import type {
-  ChangeContext,
-  CoverageSummary,
-  FindingCounts,
-  FleetSummary,
-  GateVerdict,
-  Repository,
-  Run,
-  Stage,
+import {
+  isRunActive,
+  type ChangeContext,
+  type CoverageSummary,
+  type Finding,
+  type FindingCounts,
+  type FleetSummary,
+  type GateVerdict,
+  type Repository,
+  type Run,
+  type Stage,
 } from "@qa-agent/shared-types";
 import type { EventBus } from "../events";
 import type { GitHubApp } from "../github/app";
@@ -36,7 +38,8 @@ export interface CompleteRunInput {
   verdict: Exclude<GateVerdict, "pending">;
   confidenceStatement?: string;
   confidenceScore?: number;
-  findings: FindingCounts;
+  /** Derived from stored findings when omitted, so counts and findings can't disagree. */
+  findings?: FindingCounts;
   coverage: CoverageSummary;
   fleet: FleetSummary;
 }
@@ -78,12 +81,24 @@ const EMPTY_FINDINGS: FindingCounts = {
   duplicatesCollapsed: 0,
 };
 
-const ACTIVE_STATUSES: ReadonlySet<Run["status"]> = new Set([
-  "queued",
-  "assembling-context",
-  "exploring",
-  "triaging",
-]);
+/**
+ * Gate counts exclude duplicates and dismissed findings; every duplicate the
+ * triage judge folded into a finding counts as collapsed.
+ */
+export function countFindings(findings: Finding[]): FindingCounts {
+  const counts: FindingCounts = { bySeverity: { P0: 0, P1: 0, P2: 0, P3: 0 }, total: 0, duplicatesCollapsed: 0 };
+  for (const f of findings) {
+    if (f.status === "duplicate") {
+      counts.duplicatesCollapsed += 1;
+      continue;
+    }
+    if (f.status === "dismissed") continue;
+    counts.bySeverity[f.severity] += 1;
+    counts.total += 1;
+    counts.duplicatesCollapsed += f.triage?.duplicateCount ?? 0;
+  }
+  return counts;
+}
 
 /**
  * Run lifecycle. Deployments come in from the GitHub push webhook or an
@@ -226,19 +241,32 @@ export class RunService {
     return started;
   }
 
-  async completeRun(runId: string, result: CompleteRunInput): Promise<Run> {
-    const { store, github, events, runUrl } = this.deps;
-    const existing = await store.getRun(runId);
+  /** Loads a run that must still be in flight, with its stage and repository. */
+  private async activeRun(runId: string): Promise<{ existing: Run; stage: Stage; repository: Repository }> {
+    const existing = await this.deps.store.getRun(runId);
     if (!existing) throw new RunError(`Run ${runId} not found`, "run-not-found");
-    if (!ACTIVE_STATUSES.has(existing.status)) {
+    if (!isRunActive(existing)) {
       throw new RunError(`Run ${runId} is already ${existing.status}`, "run-not-active");
     }
-    const stage = await store.getStage(existing.stageId);
+    const stage = await this.deps.store.getStage(existing.stageId);
     if (!stage) throw new RunError(`Stage ${existing.stageId} not found`, "stage-not-found");
-    const repository = await this.repoFor(stage);
+    return { existing, stage, repository: await this.repoFor(stage) };
+  }
+
+  /** Orchestrator / triage judge reports findings for a run still in flight. */
+  async addFindings(runId: string, findings: Finding[]): Promise<Finding[]> {
+    await this.activeRun(runId);
+    await this.deps.store.saveFindings(runId, findings);
+    return this.deps.store.listFindings(runId);
+  }
+
+  async completeRun(runId: string, result: CompleteRunInput): Promise<Run> {
+    const { store, github, events, runUrl } = this.deps;
+    const { stage, repository } = await this.activeRun(runId);
 
     const run = await store.updateRun(runId, {
       ...result,
+      findings: result.findings ?? countFindings(await store.listFindings(runId)),
       status: result.verdict === "block" ? "blocked" : "passed",
       finishedAt: new Date().toISOString(),
     });
@@ -259,14 +287,7 @@ export class RunService {
   /** Infra failure: no verdict, check goes to action_required. */
   async failRun(runId: string, reason: string): Promise<Run> {
     const { store, github, events } = this.deps;
-    const existing = await store.getRun(runId);
-    if (!existing) throw new RunError(`Run ${runId} not found`, "run-not-found");
-    if (!ACTIVE_STATUSES.has(existing.status)) {
-      throw new RunError(`Run ${runId} is already ${existing.status}`, "run-not-active");
-    }
-    const stage = await store.getStage(existing.stageId);
-    if (!stage) throw new RunError(`Stage ${existing.stageId} not found`, "stage-not-found");
-    const repository = await this.repoFor(stage);
+    const { existing, stage, repository } = await this.activeRun(runId);
 
     const run = await store.updateRun(runId, {
       status: "failed",

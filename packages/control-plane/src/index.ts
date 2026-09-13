@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import type { Run } from "@qa-agent/shared-types";
 import { apiRoutes } from "./api";
 import { loadConfig } from "./config";
+import { devRoutes } from "./dev";
 import { EventBus } from "./events";
 import { createGitHubApp } from "./github/app";
 import { githubOnboarding } from "./github/onboarding";
@@ -26,6 +27,11 @@ app.get("/healthz", (c) => c.json({ ok: true, slack: Boolean(config.slack) }));
 app.route("/webhooks", githubWebhooks({ github, store, runs, webBaseUrl: config.github.webBaseUrl }));
 app.route("/github", githubOnboarding({ github, store, config: config.github }));
 app.route("/api", apiRoutes({ store, runs }));
+
+if (process.env.DEV_SEED === "true") {
+  app.route("/dev", devRoutes(store));
+  console.log("[dev] seed route enabled at POST /dev/seed");
+}
 
 if (config.slack) {
   const slack = createSlackIntegration({ config: config.slack, events, runs, store, runUrl });

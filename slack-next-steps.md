@@ -53,7 +53,8 @@ and run finish loses the thread, so the report posts unthreaded.
 
 ## 4. Richer reports
 
-Today the report uses `FindingCounts` only because the store has no findings.
+Today the report uses `FindingCounts` only. Findings are now persisted
+(`store.listFindings(runId)`, most severe first), so this is unblocked.
 
 - [ ] Once findings are persisted, list the top N (P0/P1 first) with title,
       surface, and a link to the finding page. Cap at ~5 to stay under Block
