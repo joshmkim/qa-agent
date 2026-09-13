@@ -10,7 +10,7 @@ export const DEFAULT_MANIFEST_PATH = ".qa/manifest.yaml";
 const severity = z.enum(["P0", "P1", "P2", "P3"]);
 const id = z.string().regex(/^[a-z0-9][a-z0-9_-]*$/, "use lowercase letters, digits, - and _");
 
-/** v1 of the team-authored QA manifest. See docs/qa-manifest.md. */
+/** v1 of the team-authored code primitives file (.qa/manifest.yaml). See docs/code-primitives.md. */
 const manifestSchema = z
   .object({
     version: z.literal(1),

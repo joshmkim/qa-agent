@@ -133,6 +133,37 @@ Recorded so they can be revisited deliberately rather than rediscovered.
 - **Jira failures never reach the gate.** Each finding is filed in isolation
   and errors are logged, on top of the `EventBus` already isolating
   subscribers. A Jira outage must not block a promotion or fail a run.
+- **Newly filed issues are added to the active sprint, not left in the
+  backlog.** A finding that only a human would find by clicking into the
+  Backlog tab defeats the point of filing it automatically — it should appear
+  where the team is already looking. `JiraClient.findActiveSprintId()`
+  resolves the project's board and its active sprint once per run (not once
+  per finding, since it's the same answer for the whole batch and a lookup
+  isn't free), and `addToSprint()` places each newly *created* issue there.
+  Deliberately skipped on the recurrence path (commenting on an
+  already-filed issue): if someone already triaged, assigned, or started it,
+  a repeat finding shouldn't yank it back onto the current sprint. A missing
+  board (no Scrum board on the project) or no active sprint (Kanban, or
+  between sprints) degrades to the pre-existing behavior — filed to the
+  backlog, nothing breaks — rather than failing the finding.
+- **Cross-sink notification goes through a new event, not a direct call.**
+  Slack posting when Jira files an issue could have been `JiraReporter`
+  importing `SlackNotifier` and calling it after `createIssue`, but that
+  breaks the rule in `project-context.md`'s "Integration pattern (decided)"
+  that sinks never call each other. Instead `JiraReporter` emits
+  `finding.tracked` on the `EventBus` (provider-agnostic: the event only
+  needs `finding.trackedIssue` to be set, so a future non-Jira tracker sink
+  emits the same event and Slack's subscription needs no changes), and
+  `SlackNotifier` subscribes to it exactly like `run.finished`. Neither
+  module imports the other. Only fires for a genuinely new issue, mirroring
+  the sprint-placement decision above — a recurrence already got its
+  moment when the issue was first filed.
+- **This posts in addition to, not instead of, the run report.** A run that
+  finishes with new findings now sends two Slack messages seconds apart: the
+  full run report (`run.finished`) and one "new issue filed" ping per new
+  issue (`finding.tracked`). Fine for the current volume (a handful of
+  findings per run at most), but a run with many new P0s would send that
+  many separate messages. Revisit if it gets noisy — see Hardening.
 
 ## 4. Jira as agent context (the valuable half)
 
@@ -153,9 +184,9 @@ free-form LLM judgment in the oracle hierarchy in `project-context.md`.
       company-managed projects, and just a heading in the description
       elsewhere. Default to parsing an "Acceptance criteria" heading out of
       the description; make the field id configurable for teams that have one.
-- [ ] Load them in `RunService.startRun` next to the manifest load, as its
+- [ ] Load them in `RunService.startRun` next to the code primitives load, as its
       own run step ("Load Jira tickets"), cached per key. Failures must never
-      block a run, exactly like a missing manifest.
+      block a run, exactly like missing code primitives.
 - [ ] Add to `ChangeContext.jiraIssues` so they flow through `RunContext` and
       into every agent's `ContextBundle`.
 - [ ] Show them on the run page and the GitHub check summary ("3 tickets
@@ -199,11 +230,11 @@ Same tradeoff that cut Slack's slash commands from its MVP.
 
 Current wiring is single-site: one token, one project, from env.
 
-- [ ] Per-repository project key. The QA manifest is the natural home — it is
+- [ ] Per-repository project key. The code primitives file is the natural home — it is
       team-owned and versioned with the code — as a `jira:` block
       (`project`, `issueType`, `minSeverity`). Falls back to env.
-      Requires a manifest schema bump in `src/manifest/load.ts` and
-      `docs/qa-manifest.md`.
+      Requires a code primitives schema bump in `src/manifest/load.ts` and
+      `docs/code-primitives.md`.
 - [ ] OAuth 2.0 (3LO) instead of a personal API token, so issues are filed by
       an app rather than one person's account. This is inbound (Atlassian
       redirects to a callback), so it needs a public URL.
@@ -218,6 +249,11 @@ Current wiring is single-site: one token, one project, from env.
 - [ ] Cap issues filed per run (~20) and fold the remainder into one summary
       issue. A 100-agent run on a badly broken build could otherwise dump
       hundreds of issues into a backlog.
+- [ ] Fold multiple `finding.tracked` pings from the same run into one Slack
+      message ("3 new issues filed: SCRUM-40, SCRUM-41, SCRUM-42") instead of
+      one message per issue, once the same run regularly files more than a
+      couple. Today's per-issue message (see Decisions §3) is fine at current
+      volume but doesn't scale with the cap above.
 - [ ] Retry on 429 honouring `Retry-After`. Atlassian rate limits are
       cost-based and tighter on free; the current client does not retry at all.
 - [ ] Throttle concurrent creates. Findings are filed sequentially today,
@@ -234,5 +270,5 @@ Current wiring is single-site: one token, one project, from env.
 ## 9. Documentation
 
 - [ ] Add a "Jira" section to the root `README.md` mirroring section 1.
-- [ ] Document the `jira:` manifest block in `docs/qa-manifest.md` once §7
+- [ ] Document the `jira:` code primitives block in `docs/code-primitives.md` once §7
       lands.

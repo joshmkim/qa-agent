@@ -102,7 +102,7 @@ export interface Run {
   fleet: FleetSummary;
   coverage: CoverageSummary;
   findings: FindingCounts;
-  /** Which QA manifest this run used; the full snapshot is served separately. */
+  /** Which code primitives this run used; the full snapshot is served separately. */
   manifest?: Omit<ManifestSnapshot, "product"> & { version?: string };
   /** GitHub check run id once posted. */
   checkRunId?: number;

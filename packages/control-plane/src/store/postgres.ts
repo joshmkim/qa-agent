@@ -222,7 +222,7 @@ export class PostgresStore implements Store {
     return row?.data as Finding | undefined;
   }
 
-  // --- QA manifests ---
+  // --- code primitives ---
 
   async saveManifestSnapshot(repositoryId: string, snapshot: ManifestSnapshot): Promise<void> {
     await this.sql`

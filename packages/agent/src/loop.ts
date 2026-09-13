@@ -21,7 +21,7 @@ export interface LoopOptions extends PromptOptions {
 const MODEL_RETRIES = 3;
 
 /**
- * Guess which manifest surface the page belongs to from its URL, so
+ * Guess which code primitives surface the page belongs to from its URL, so
  * auto-filed hard errors land on a real surface. Route locators may contain
  * ":param" segments.
  */

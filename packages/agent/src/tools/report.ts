@@ -11,7 +11,7 @@ function knownSurface(ctx: ToolContext, surfaceId: string): boolean {
 }
 
 function surfaceList(ctx: ToolContext): string {
-  return ctx.bundle.product.surfaces.map((s) => `${s.id} (${s.kind}: ${s.name})`).join(", ") || "(manifest has no surfaces; use a short slug like \"checkout-page\")";
+  return ctx.bundle.product.surfaces.map((s) => `${s.id} (${s.kind}: ${s.name})`).join(", ") || "(code primitives list no surfaces; use a short slug like \"checkout-page\")";
 }
 
 /** Gather evidence for a finding: fresh screenshot + recorded errors. */
@@ -83,7 +83,7 @@ export const fileFinding: ToolDefinition = {
       severity: { type: "string", enum: SEVERITIES },
       title: { type: "string", description: "One line, specific: what broke where. Same bug on different data should get the same title." },
       summary: { type: "string", description: "What you did, what you expected, what happened. Include the exact text/values seen." },
-      surfaceId: { type: "string", description: "Manifest surface id where the bug shows." },
+      surfaceId: { type: "string", description: "Code primitives surface id where the bug shows." },
       oracle: { type: "string", enum: ORACLES },
       invariantId: { type: "string", description: "Required when oracle=invariant." },
       signature: { type: "string", description: "Optional error message or symptom used for dedupe; defaults to the title." },
@@ -137,7 +137,7 @@ export const fileFinding: ToolDefinition = {
 export const checkInvariant: ToolDefinition = {
   name: "check_invariant",
   description:
-    "Record that you evaluated a manifest invariant. If holds=false a finding is filed automatically at the invariant's severity, with your observation as the summary. Call this for every invariant you are able to test, pass or fail; it feeds coverage.",
+    "Record that you evaluated a code primitives invariant. If holds=false a finding is filed automatically at the invariant's severity, with your observation as the summary. Call this for every invariant you are able to test, pass or fail; it feeds coverage.",
   inputSchema: {
     type: "object",
     properties: {
@@ -184,7 +184,7 @@ export const checkInvariant: ToolDefinition = {
 
 export const markSurfaceVisited: ToolDefinition = {
   name: "mark_surface_visited",
-  description: "Tell the orchestrator which manifest surfaces you have now exercised. Call after you finish with a page/form/flow, even if nothing was wrong. Drives the coverage report and steers other agents.",
+  description: "Tell the orchestrator which code primitives surfaces you have now exercised. Call after you finish with a page/form/flow, even if nothing was wrong. Drives the coverage report and steers other agents.",
   inputSchema: {
     type: "object",
     properties: {

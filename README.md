@@ -6,10 +6,10 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 
 - `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
 - `packages/shared-types` – the two real contracts (`ContextBundle`, `Finding`) plus control-plane data shapes (`Pipeline`, `Stage`, `Run`).
-- `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
+- `packages/control-plane` – GitHub App, webhooks, cursors/diff, code primitives loading, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
 - `packages/agent` – the exploration agent runtime: Playwright browser session, self-recovering tool primitives (click, type, navigate, read_dom, call_api, ...), reporting tools (file_finding, check_invariant), and the model loop. Spawned N times per run by the orchestrator; also runnable standalone from a `ContextBundle` JSON.
 
-The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md).
+The repository under test describes itself to the fleet with code primitives at `.qa/manifest.yaml`; see [`docs/code-primitives.md`](docs/code-primitives.md). The live environment agents test is described in [`docs/test-environment.md`](docs/test-environment.md).
 
 ## Getting started
 
@@ -76,7 +76,7 @@ Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + inst
 
 ## Agent fleet
 
-With `ANTHROPIC_API_KEY` set, the control-plane orchestrates every run it starts: it takes the run's context from the run service (change, QA manifest with touched surfaces, stage environment and budget), builds one persona per agent (methodical / chaos-monkey / adversarial-fuzzer / impatient-user, each focused on surfaces touched by the change), runs agents in waves of `FLEET_CONCURRENCY`, steers later waves away from saturated surfaces, dedupes findings across agents, and completes the run with a verdict (`block` on any P0) and a confidence statement. The stage needs an `environmentUrl` (and can set `budgetSeconds` per agent):
+With `ANTHROPIC_API_KEY` set, the control-plane orchestrates every run it starts: it takes the run's context from the run service (change, code primitives with touched surfaces, stage environment and budget), builds one persona per agent (methodical / chaos-monkey / adversarial-fuzzer / impatient-user, each focused on surfaces touched by the change), runs agents in waves of `FLEET_CONCURRENCY`, steers later waves away from saturated surfaces, dedupes findings across agents, and completes the run with a verdict (`block` on any P0) and a confidence statement. The stage needs an `environmentUrl` (and can set `budgetSeconds` per agent):
 
 ```bash
 pnpm --filter @qa-agent/agent install-browsers   # once; downloads Chromium
@@ -85,7 +85,7 @@ curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta \
   -d '{"branch":"beta","protectedBranch":"gamma","environmentUrl":"https://beta.example.com","fleetSize":4}'
 ```
 
-Each agent sees the full diff (patches, PR titles/bodies, linked issues), the surface inventory and invariants from the manifest, its persona, and the environment boundaries. It acts only through tools; each tool recovers from the usual stalls (overlays, slow renders, ambiguous targets) and returns a structured failure that lists what is actually on screen. 5xx responses, crashes and uncaught exceptions are auto-filed as findings even if the agent never notices them.
+Each agent sees the full diff (patches, PR titles/bodies, linked issues), the surface inventory and invariants from the code primitives, its persona, and the environment boundaries. It acts only through tools; each tool recovers from the usual stalls (overlays, slow renders, ambiguous targets) and returns a structured failure that lists what is actually on screen. 5xx responses, crashes and uncaught exceptions are auto-filed as findings even if the agent never notices them.
 
 Run one agent by hand from a bundle, or the offline smoke tests (no key, no network):
 

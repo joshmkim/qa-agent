@@ -13,7 +13,7 @@ proceeds or blocks based on findings.
 ### 1. Context assembly (per deployment)
 - Change context: the diff between last deployed position and current head,
   enriched with PR titles/bodies (product description), labels, linked issues.
-- Codebase/product context: a team-owned, versioned "QA manifest" in the repo
+- Codebase/product context: team-owned, versioned "code primitives" in the repo
   (surface inventory of pages/buttons/forms/endpoints, product intent and
   stakeholders, known invariants like "cart total = sum of line items").
   Invariants are the highest-leverage artifact.
@@ -49,6 +49,8 @@ Every action self-recovers and returns structured failure.
 
 ## Key design decisions still open per-org
 - State isolation: per-agent test accounts vs. per-agent sandboxed stacks.
+  Current: one isolated beta stack (Vercel + its own Supabase project) with
+  10 shared test shoppers; see `docs/test-environment.md`.
 - Oracle problem: hard errors (free) -> team invariants (authored) -> LLM
   judgment against product description (grows over time).
 
@@ -220,11 +222,11 @@ Agent (`packages/agent/src`):
 
 Orchestrator (`packages/control-plane/src/orchestrator`):
 - Context comes from `RunService.contextFor(runId)` (`RunContext`: change,
-  the run's QA manifest snapshot with `touchedByChange` from `sources`
+  the run's code primitives snapshot with `touchedByChange` from `sources`
   globs, stage environment and `Stage.budgetSeconds`). The orchestrator adds
   agentId, persona, saturated surfaces, and replaces
   `environment.blastRadiusBoundaries` with the URL-level `AGENT_BLAST_RADIUS`
-  list: the manifest's `boundaries` are policy sentences, rendered to the
+  list: the code primitives' `boundaries` are policy sentences, rendered to the
   agent from `product.boundaries`, not URL rules.
 - `personas.ts` disposition mix 40/25/20/15 (largest remainder, interleaved
   so every wave is mixed); focus areas rotate through touched surfaces first.
@@ -291,14 +293,14 @@ Deferred / known gaps:
 - `@slack/web-api` is pinned to 7.x (8.x needs Node 20), same reason as the
   Octokit pins.
 
-## QA manifest (built)
-`.qa/manifest.yaml` in the repo under test, format in `docs/qa-manifest.md`:
+## Code primitives (built)
+`.qa/manifest.yaml` in the repo under test, format in `docs/code-primitives.md`:
 product intent, surfaces (with `sources` globs mapping them to code),
 invariants (with severity and optional surface refs), and boundaries.
 - Loaded at each run's head SHA and cached per `(repository, commit)`;
   `Run.manifest` records path, commit, status, and version (short blob SHA).
-- Missing/invalid manifests never block a run: a skipped/failed "Load QA
-  manifest" step and a note on the GitHub check.
+- Missing/invalid code primitives never block a run: a skipped/failed "Load
+  code primitives" step and a note on the GitHub check.
 - `touchedByChange` is computed per run from `change.changedFiles`; the
   check lists touched surfaces and coverage totals are filled at run start.
 - `GET /api/runs/:id/context` returns `RunContext` (change + product +
@@ -311,7 +313,7 @@ invariants (with severity and optional surface refs), and boundaries.
 `packages/web/src/lib/data.ts` is the only data seam. It uses
 `src/lib/data/control-plane.ts` (server-side fetches to `CONTROL_PLANE_URL`,
 `no-store`) when `CONTROL_PLANE_URL` is set or `DATA_SOURCE=api`, and the
-fixtures in `src/lib/data/mock.ts` otherwise. The Manifest tab and finding
-pages read the manifest snapshot the run used. Pages that
+fixtures in `src/lib/data/mock.ts` otherwise. The Code primitives tab and
+finding pages read the code primitives snapshot the run used. Pages that
 show in-flight runs poll with `router.refresh()` every 15s. Remaining
 integration work is tracked in `pipeline-steps.MD`.

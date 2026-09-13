@@ -117,7 +117,7 @@ export class Orchestrator {
       if (!stage.environmentUrl) {
         throw new OrchestrationError(`Stage "${stage.name}" has no environmentUrl; set it via PUT /api/repositories/${repository.fullName}/stages/${stage.name}`);
       }
-      // The run service owns context assembly: change window, the QA manifest
+      // The run service owns context assembly: change window, the code primitives
       // snapshot for this run (surfaces already marked touched), stage
       // environment and budget. We add the per-agent fields.
       const shared = await runs.contextFor(run.id);
@@ -143,7 +143,7 @@ export class Orchestrator {
         {
           name: STEP_CONTEXT,
           status: "succeeded",
-          detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; manifest ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize} x ${budgetSeconds}s, ${config.scrutiny} scrutiny${cap > 0 && requested > cap ? ` (capped from ${requested} by MAX_FLEET_SIZE)` : ""}`,
+          detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; code primitives ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize} x ${budgetSeconds}s, ${config.scrutiny} scrutiny${cap > 0 && requested > cap ? ` (capped from ${requested} by MAX_FLEET_SIZE)` : ""}`,
         },
         { fleet: { agentsRequested: fleetSize } },
       );

@@ -15,7 +15,7 @@ export interface AgentResult {
   findings: Finding[];
   /** Every tool call the agent made, in order. */
   trace: ActionStep[];
-  /** Surface ids the agent reported visiting (from the manifest). */
+  /** Surface ids the agent reported visiting (from the code primitives). */
   visitedSurfaceIds: string[];
   /** Invariant ids the agent explicitly evaluated, violated or not. */
   checkedInvariantIds: string[];

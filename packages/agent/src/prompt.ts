@@ -94,7 +94,7 @@ export function renderProduct(bundle: ContextBundle): string {
   const lines: string[] = [];
   lines.push(`Product: ${product.productName}`, `Intent: ${product.intent}`);
   if (product.stakeholders.length) lines.push(`Stakeholders: ${product.stakeholders.join(", ")}`);
-  lines.push(`Manifest version: ${product.manifestVersion}`);
+  lines.push(`Code primitives version: ${product.manifestVersion}`);
 
   if (product.surfaces.length) {
     lines.push("", "## Surface inventory");
@@ -104,7 +104,7 @@ export function renderProduct(bundle: ContextBundle): string {
       lines.push(`${marks} ${s.id} · ${s.kind} · ${s.name} · ${s.locator}${s.description ? ` — ${s.description}` : ""}`);
     }
   } else {
-    lines.push("", "## Surface inventory", "The manifest lists no surfaces yet. Discover them yourself starting from the base URL, and use short descriptive slugs (e.g. \"cart-page\", \"checkout-form\") as surfaceId when filing findings or marking visits.");
+    lines.push("", "## Surface inventory", "The code primitives list no surfaces yet. Discover them yourself starting from the base URL, and use short descriptive slugs (e.g. \"cart-page\", \"checkout-form\") as surfaceId when filing findings or marking visits.");
   }
 
   if (product.invariants.length) {

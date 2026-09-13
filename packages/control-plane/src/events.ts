@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import type { ChangeContext, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { ChangeContext, Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
 
 /**
  * Domain events the control plane emits as runs move through their lifecycle.
@@ -43,11 +43,26 @@ export interface RunFinished {
   run: Run;
 }
 
+/**
+ * A finding was newly filed as an issue in an external tracker (today, only
+ * Jira). Not emitted for a recurrence (a repeat finding commenting on an
+ * issue filed earlier) — only for the first time a defect gets a ticket.
+ * `finding.trackedIssue` is set. Provider-agnostic so any future tracker
+ * integration (Linear, Asana, ...) can emit the same event.
+ */
+export interface FindingTracked {
+  repository: Repository;
+  stage: Stage;
+  run: Run;
+  finding: Finding;
+}
+
 export interface EventMap {
   "deployment.detected": DeploymentDetected;
   "deployment.failed": DeploymentFailed;
   "run.started": RunStarted;
   "run.finished": RunFinished;
+  "finding.tracked": FindingTracked;
 }
 
 type Handler<K extends keyof EventMap> = (event: EventMap[K]) => void | Promise<void>;
