@@ -1,4 +1,4 @@
-import type { ChangeContext, PullRequestRef } from "@qa-agent/shared-types";
+import type { ChangeContext, ChangedFile, PullRequestRef } from "@qa-agent/shared-types";
 import type { InstallationOctokit } from "./app";
 
 /** GitHub returns at most this many commits per compare page. */
@@ -24,8 +24,8 @@ interface CompareResult {
   mergeBaseSha: string;
   totalCommits: number;
   commits: CompareCommit[];
-  /** Length of files[] on the first page; capped at COMPARE_FILE_CAP. */
-  filesOnFirstPage: number;
+  /** files[] from the first page; GitHub caps it at COMPARE_FILE_CAP. */
+  files: ChangedFile[];
 }
 
 async function compare(
@@ -38,7 +38,7 @@ async function compare(
   let status: CompareResult["status"] = "identical";
   let mergeBaseSha = base;
   let totalCommits = 0;
-  let filesOnFirstPage = 0;
+  let files: ChangedFile[] = [];
 
   for (let page = 1; commits.length < MAX_COMMITS; page++) {
     const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
@@ -51,13 +51,18 @@ async function compare(
       status = data.status;
       mergeBaseSha = data.merge_base_commit.sha;
       totalCommits = data.total_commits;
-      filesOnFirstPage = data.files?.length ?? 0;
+      files = (data.files ?? []).map((f) => ({
+        path: f.filename,
+        status: f.status,
+        additions: f.additions,
+        deletions: f.deletions,
+      }));
     }
     commits.push(...data.commits.map((c) => ({ sha: c.sha, commit: { message: c.commit.message } })));
     if (data.commits.length < COMPARE_PAGE_SIZE || commits.length >= totalCommits) break;
   }
 
-  return { status, mergeBaseSha, totalCommits, commits, filesOnFirstPage };
+  return { status, mergeBaseSha, totalCommits, commits, files };
 }
 
 async function mapWithConcurrency<T, R>(
@@ -164,7 +169,8 @@ async function enrichPullRequests(
  * - "diverged" (base not an ancestor of head, e.g. after a force-push or a
  *   branch-promotion merge) falls back to comparing from the merge base.
  * - Commit list is paginated past GitHub's 250/page cap.
- * - File count past the 300-file cap is reconstructed from PR metadata.
+ * - File count past the 300-file cap is reconstructed from PR metadata, and
+ *   `filesTruncated` tells agents the file list is incomplete.
  */
 export async function computeChangeContext(
   octokit: InstallationOctokit,
@@ -184,10 +190,11 @@ export async function computeChangeContext(
 
   const pullRequests = await enrichPullRequests(octokit, ref, result.commits);
 
+  const filesTruncated = result.files.length >= COMPARE_FILE_CAP;
   const filesChanged =
-    result.filesOnFirstPage >= COMPARE_FILE_CAP && pullRequests.length > 0
+    filesTruncated && pullRequests.length > 0
       ? pullRequests.reduce((n, pr) => n + pr.filesChanged, 0)
-      : result.filesOnFirstPage;
+      : result.files.length;
 
   return {
     baseSha: effectiveBase,
@@ -196,5 +203,7 @@ export async function computeChangeContext(
     filesChanged,
     pullRequests,
     compareStatus: result.status,
+    changedFiles: result.files,
+    filesTruncated,
   };
 }

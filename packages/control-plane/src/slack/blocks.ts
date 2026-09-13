@@ -115,6 +115,28 @@ export function deploymentMessage(input: {
   return { text: title, blocks };
 }
 
+/** Context assembly failed; no fleet ran. Short, no button, no thread. */
+export function deploymentFailedMessage(input: {
+  repository: Repository;
+  stage: Stage;
+  headSha: string;
+  reason: string;
+  runUrl: string;
+}): SlackMessage {
+  const { repository, stage, headSha, reason, runUrl } = input;
+  const title = `Couldn't assemble context for ${short(headSha)} on ${repository.fullName} → ${stage.name}`;
+  return {
+    text: title,
+    blocks: [
+      section(
+        `⚠️ Couldn't assemble context for <${commitUrl(repository, headSha)}|\`${short(headSha)}\`> on ` +
+          `\`${stage.branch}\` (${escape(repository.fullName)}). No fleet ran; the next push retries from the same base.`,
+      ),
+      context(`${escape(reason).slice(0, 300)} · <${runUrl}|view run>`),
+    ],
+  };
+}
+
 /** Replaces the deployment message (or stands alone for manual triggers). */
 export function runStartedMessage(input: {
   repository: Repository;

@@ -1,7 +1,7 @@
 import type { WebClient } from "@slack/web-api";
 import type { Run } from "@qa-agent/shared-types";
-import type { EventBus } from "../events";
-import { deploymentMessage, runReportMessage, runStartedMessage } from "./blocks";
+import type { DeploymentFailed, EventBus } from "../events";
+import { deploymentFailedMessage, deploymentMessage, runReportMessage, runStartedMessage } from "./blocks";
 
 export interface NotifierDeps {
   client: WebClient;
@@ -20,6 +20,7 @@ interface PostedMessage {
  * Turns run lifecycle events into Slack messages:
  *
  *   deployment.detected -> new message (with a kickoff button if not auto-run)
+ *   deployment.failed   -> short standalone notice, no thread
  *   run.started         -> edits the deployment message in place, or posts a
  *                          fresh one for manual/API-triggered runs
  *   run.finished        -> report threaded under the run's message and
@@ -39,6 +40,7 @@ export class SlackNotifier {
     const { events } = this.deps;
     const offs = [
       events.on("deployment.detected", (e) => this.onDeployment(e)),
+      events.on("deployment.failed", (e) => this.onDeploymentFailed(e)),
       events.on("run.started", (e) => this.onRunStarted(e)),
       events.on("run.finished", (e) => this.onRunFinished(e)),
     ];
@@ -63,6 +65,16 @@ export class SlackNotifier {
         ts: res.ts,
       });
     }
+  }
+
+  private async onDeploymentFailed(e: DeploymentFailed): Promise<void> {
+    const msg = deploymentFailedMessage({ ...e, runUrl: this.deps.runUrl(e.run) });
+    await this.deps.client.chat.postMessage({
+      channel: this.deps.channelId,
+      text: msg.text,
+      blocks: msg.blocks,
+      unfurl_links: false,
+    });
   }
 
   private async onRunStarted(e: {
