@@ -49,6 +49,8 @@ export interface Surface {
   /** Route, selector, or endpoint path depending on kind. */
   locator: string;
   description?: string;
+  /** Repo path globs that implement this surface; used to mark it touched. */
+  sources?: string[];
   /** Surfaces touched by files in the change window get priority. */
   touchedByChange?: boolean;
 }
@@ -60,6 +62,8 @@ export interface Invariant {
   /** Optional machine-checkable expression the judge can evaluate. */
   check?: string;
   severityOnViolation: Severity;
+  /** Surfaces where this invariant is observable. */
+  surfaceIds?: string[];
 }
 
 export interface ProductContext {
@@ -68,7 +72,28 @@ export interface ProductContext {
   stakeholders: string[];
   surfaces: Surface[];
   invariants: Invariant[];
+  /** Short blob SHA of the manifest file; changes only when the manifest does. */
   manifestVersion: string;
+  /** Things agents must never do, authored by the team in the manifest. */
+  boundaries?: string[];
+}
+
+export type ManifestStatus =
+  | "loaded"
+  | "missing" // no manifest file at that commit
+  | "invalid" // file exists but failed validation
+  | "error"; // could not be fetched (GitHub error)
+
+/** The QA manifest as read from a repo at one commit. */
+export interface ManifestSnapshot {
+  path: string;
+  commitSha: string;
+  status: ManifestStatus;
+  /** Present when status is "loaded". Surfaces carry touchedByChange for the run that loaded it. */
+  product?: ProductContext;
+  /** Validation or fetch errors, path-prefixed where possible. */
+  errors?: string[];
+  loadedAt: string;
 }
 
 export interface EnvironmentContext {
@@ -111,3 +136,9 @@ export interface ContextBundle {
   /** States other agents already saturated; steer away. */
   saturatedSurfaceIds: string[];
 }
+
+/**
+ * Everything about a run that every agent shares. The orchestrator adds the
+ * per-agent fields (agentId, persona, saturatedSurfaceIds) to make a bundle.
+ */
+export type RunContext = Omit<ContextBundle, "agentId" | "persona" | "saturatedSurfaceIds">;
