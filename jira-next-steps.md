@@ -133,6 +133,19 @@ Recorded so they can be revisited deliberately rather than rediscovered.
 - **Jira failures never reach the gate.** Each finding is filed in isolation
   and errors are logged, on top of the `EventBus` already isolating
   subscribers. A Jira outage must not block a promotion or fail a run.
+- **Newly filed issues are added to the active sprint, not left in the
+  backlog.** A finding that only a human would find by clicking into the
+  Backlog tab defeats the point of filing it automatically — it should appear
+  where the team is already looking. `JiraClient.findActiveSprintId()`
+  resolves the project's board and its active sprint once per run (not once
+  per finding, since it's the same answer for the whole batch and a lookup
+  isn't free), and `addToSprint()` places each newly *created* issue there.
+  Deliberately skipped on the recurrence path (commenting on an
+  already-filed issue): if someone already triaged, assigned, or started it,
+  a repeat finding shouldn't yank it back onto the current sprint. A missing
+  board (no Scrum board on the project) or no active sprint (Kanban, or
+  between sprints) degrades to the pre-existing behavior — filed to the
+  backlog, nothing breaks — rather than failing the finding.
 
 ## 4. Jira as agent context (the valuable half)
 
