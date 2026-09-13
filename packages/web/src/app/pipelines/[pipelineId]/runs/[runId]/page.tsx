@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isRunActive } from "@qa-agent/shared-types";
 import { getPipeline, getRun, getStage, listFindings } from "@/lib/data";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { FindingsTable } from "@/components/findings-table";
 import {
   Button,
@@ -40,6 +42,7 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
 
   return (
     <div className="space-y-5">
+      <AutoRefresh active={isRunActive(run)} />
       {/* Sub header */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>

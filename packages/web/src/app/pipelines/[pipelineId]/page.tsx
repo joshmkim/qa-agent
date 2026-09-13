@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { isRunActive } from "@qa-agent/shared-types";
 import { getPipeline, getRun, listRuns } from "@/lib/data";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { SourceColumn, StageColumn, StageConnector } from "@/components/stage-graph";
 import {
   Container,
@@ -23,8 +25,11 @@ export default async function PipelinePage({ params }: { params: Promise<{ pipel
 
   const blocked = latestRuns.filter((r) => r?.verdict === "block").length;
 
+  const active = [...latestRuns, ...recent].some((r) => r !== undefined && isRunActive(r));
+
   return (
     <div className="space-y-5">
+      <AutoRefresh active={active} />
       {blocked > 0 && (
         <div className="flex items-start gap-3 rounded-[8px] border border-[#f5b0b0] bg-error-bg px-4 py-3">
           <StatusIndicator tone="error">Promotion blocked</StatusIndicator>

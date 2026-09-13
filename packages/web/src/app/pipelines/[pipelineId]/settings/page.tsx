@@ -54,6 +54,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
               <th>Branch</th>
               <th>Environment</th>
               <th>Fleet size</th>
+              <th>Auto-run</th>
               <th>Gates promotion to</th>
               <th>Cursor</th>
             </tr>
@@ -78,6 +79,13 @@ export default async function SettingsPage({ params }: { params: Promise<{ pipel
                     )}
                   </td>
                   <td>{s.fleetSize} agents</td>
+                  <td>
+                    {(s.autoRun ?? true) ? (
+                      "On deployment"
+                    ) : (
+                      <span className="text-text-secondary">Manual</span>
+                    )}
+                  </td>
                   <td>
                     {s.gatesPromotion && s.protectedBranch ? (
                       <Code>{s.protectedBranch}</Code>

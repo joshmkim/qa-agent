@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { isRunActive } from "@qa-agent/shared-types";
 import { listPipelines, listRuns } from "@/lib/data";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { Container, Icons, PageHeader, RunStatusIndicator, SeverityCounts, Button } from "@/components/ui";
 import { relativeTime } from "@/lib/format";
 
@@ -14,6 +16,7 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-5">
+      <AutoRefresh active={rows.some(({ latest }) => latest !== undefined && isRunActive(latest))} />
       <PageHeader
         title="Pipelines"
         subtitle="Repositories connected through the GitHub App. Each stage maps to a deployment branch and is gated by an agent fleet run."
