@@ -1,4 +1,10 @@
-import type { DeployCursor, Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { DeployCursor, Finding, FleetConfig, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
+
+/** A saved FleetConfig plus when it was last written. */
+export interface StoredFleetConfig {
+  config: FleetConfig;
+  updatedAt: string;
+}
 
 /** One tenant: an org or user account that installed the GitHub App. */
 export interface Installation {
@@ -69,4 +75,11 @@ export interface Store {
   // --- webhook delivery dedupe ---
   /** Returns true if this delivery id is new (and records it). */
   claimDelivery(deliveryId: string): Promise<boolean>;
+
+  // --- fleet configuration (edited from the web UI) ---
+  /** Undefined until someone saves; callers then fall back to environment defaults. */
+  getFleetConfig(): Promise<StoredFleetConfig | undefined>;
+  putFleetConfig(config: FleetConfig): Promise<StoredFleetConfig>;
+  /** Back to environment defaults. */
+  deleteFleetConfig(): Promise<void>;
 }

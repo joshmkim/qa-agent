@@ -517,6 +517,8 @@ export class RunService {
     runId: string,
     status: Extract<RunStatus, "assembling-context" | "exploring" | "triaging">,
     step: { name: string; status: RunStep["status"]; detail?: string },
+    /** Extra fields learned while assembling, e.g. the resolved fleet size. */
+    patch: { fleet?: Partial<FleetSummary> } = {},
   ): Promise<Run> {
     const { existing } = await this.activeRun(runId);
     const now = new Date().toISOString();
@@ -541,7 +543,11 @@ export class RunService {
         ...(step.detail !== undefined ? { detail: step.detail } : {}),
       };
     }
-    return this.deps.store.updateRun(runId, { status, steps });
+    return this.deps.store.updateRun(runId, {
+      status,
+      steps,
+      ...(patch.fleet ? { fleet: { ...existing.fleet, ...patch.fleet } } : {}),
+    });
   }
 
   /** Orchestrator / triage judge reports findings for a run still in flight. */

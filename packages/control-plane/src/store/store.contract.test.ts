@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, describe, it } from "node:test";
 import postgres, { type Sql } from "postgres";
-import type { Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
+import { DEFAULT_FLEET_CONFIG, type Finding, type ManifestSnapshot, type Repository, type Run, type Stage } from "@qa-agent/shared-types";
 import type { Installation, Store } from "./index";
 import { MemoryStore } from "./memory";
 import { migrate } from "./migrate";
@@ -300,6 +300,22 @@ function describeStore(name: string, setup: () => Promise<Harness>) {
       assert.equal(await h.store.getLatestManifestSnapshot("r2"), undefined);
     });
 
+    it("round-trips the fleet config and clears it back to unset", async () => {
+      assert.equal(await h.store.getFleetConfig(), undefined, "unset until saved");
+      const saved = await h.store.putFleetConfig({ ...DEFAULT_FLEET_CONFIG, agentsPerRun: 12, scrutiny: "thorough" });
+      assert.equal(saved.config.agentsPerRun, 12);
+      assert.ok(!Number.isNaN(Date.parse(saved.updatedAt)), "updatedAt is ISO-8601");
+      const read = await h.store.getFleetConfig();
+      assert.deepEqual(read?.config, { ...DEFAULT_FLEET_CONFIG, agentsPerRun: 12, scrutiny: "thorough" });
+
+      const again = await h.store.putFleetConfig({ ...DEFAULT_FLEET_CONFIG, orchestrators: 3 });
+      assert.equal((await h.store.getFleetConfig())?.config.orchestrators, 3, "replace, not merge");
+      assert.equal(again.config.agentsPerRun, DEFAULT_FLEET_CONFIG.agentsPerRun);
+
+      await h.store.deleteFleetConfig();
+      assert.equal(await h.store.getFleetConfig(), undefined);
+    });
+
     it("dedupes webhook deliveries for 24 hours", async () => {
       assert.equal(await h.store.claimDelivery("d1"), true);
       assert.equal(await h.store.claimDelivery("d1"), false);
@@ -336,7 +352,7 @@ if (testDatabaseUrl) {
 
   describeStore("postgres", async () => {
     await sql`
-      TRUNCATE installations, repositories, stages, run_counters, runs, findings, manifest_snapshots, webhook_deliveries
+      TRUNCATE installations, repositories, stages, run_counters, runs, findings, manifest_snapshots, webhook_deliveries, settings
     `;
     return {
       store: new PostgresStore(sql),

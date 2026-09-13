@@ -26,6 +26,10 @@ export const {
   getPipelineManifest,
   getRunManifest,
   triggerRun,
+  getFleetSettings,
+  saveFleetSettings,
+  resetFleetSettings,
+  FleetSettingsError,
 } = source;
 
 /** True when pages read from a control plane (writes like "Trigger run" are possible). */

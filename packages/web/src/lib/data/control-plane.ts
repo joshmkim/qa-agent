@@ -1,5 +1,5 @@
 /** Control-plane backed data source. Server-only: reads CONTROL_PLANE_URL. */
-import type { Finding, ManifestSnapshot, Pipeline, Run, Stage } from "@qa-agent/shared-types";
+import type { Finding, FleetConfig, FleetConfigView, ManifestSnapshot, Pipeline, Run, Stage } from "@qa-agent/shared-types";
 
 const baseUrl = (process.env.CONTROL_PLANE_URL ?? "http://localhost:3001").replace(/\/$/, "");
 
@@ -54,6 +54,50 @@ export async function getPipelineManifest(pipelineId: string): Promise<ManifestS
 
 export async function getRunManifest(runId: string): Promise<ManifestSnapshot | undefined> {
   return get<ManifestSnapshot>(`/runs/${id(runId)}/manifest`);
+}
+
+// --- fleet configuration (Fleet page) ---
+
+/** Thrown for a 400 from PUT /api/fleet; `issues` are per-field validation messages. */
+export class FleetSettingsError extends Error {
+  constructor(
+    message: string,
+    readonly issues: Array<{ path: string; message: string }> = [],
+  ) {
+    super(message);
+    this.name = "FleetSettingsError";
+  }
+}
+
+async function send<T>(method: "PUT" | "DELETE", path: string, body?: unknown): Promise<T> {
+  const res = await fetch(`${baseUrl}/api${path}`, {
+    method,
+    cache: "no-store",
+    headers: body === undefined ? undefined : { "content-type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (res.status === 400) {
+    const err = (await res.json().catch(() => ({}))) as { message?: string; issues?: Array<{ path: string; message: string }> };
+    throw new FleetSettingsError(err.message ?? "Invalid fleet settings", err.issues ?? []);
+  }
+  if (!res.ok) {
+    throw new Error(`Control plane ${method} ${path} failed: ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as T;
+}
+
+export async function getFleetSettings(): Promise<FleetConfigView> {
+  const view = await get<FleetConfigView>("/fleet");
+  if (!view) throw new Error("Control plane has no /api/fleet route; update the control plane");
+  return view;
+}
+
+export async function saveFleetSettings(patch: Partial<FleetConfig>): Promise<FleetConfigView> {
+  return send<FleetConfigView>("PUT", "/fleet", patch);
+}
+
+export async function resetFleetSettings(): Promise<FleetConfigView> {
+  return send<FleetConfigView>("DELETE", "/fleet");
 }
 
 /**

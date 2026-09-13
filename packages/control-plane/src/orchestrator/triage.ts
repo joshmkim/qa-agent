@@ -1,14 +1,24 @@
-import type {
-  AgentResult,
-  ChangeContext,
-  CoverageSummary,
-  Finding,
-  FleetSummary,
-  GateVerdict,
-  Persona,
-  ProductContext,
-  Severity,
+import {
+  atLeastAsSevere,
+  type AgentResult,
+  type ChangeContext,
+  type CoverageSummary,
+  type Finding,
+  type FleetSummary,
+  type GateVerdict,
+  type Persona,
+  type ProductContext,
+  type Severity,
 } from "@qa-agent/shared-types";
+
+export interface TriagePolicy {
+  /** Canonical findings less severe than this are dismissed (kept for the record, not counted). */
+  minSeverity: Severity;
+  /** Verdict is "block" when any counted finding is at least this severe. */
+  blockOn: Severity;
+}
+
+export const DEFAULT_TRIAGE_POLICY: TriagePolicy = { minSeverity: "P3", blockOn: "P0" };
 
 export interface TriageInput {
   results: AgentResult[];
@@ -16,6 +26,7 @@ export interface TriageInput {
   product: ProductContext;
   change: ChangeContext;
   agentsRequested: number;
+  policy?: TriagePolicy;
 }
 
 export interface TriageOutput {
@@ -207,9 +218,20 @@ function surfaceLabel(id: string, product: ProductContext): string {
  */
 export function triage(input: TriageInput): TriageOutput {
   const { results, personas, product, change, agentsRequested } = input;
-  const deduped = dedupeFindings(results.flatMap((r) => r.findings)).map((f) =>
-    f.status === "duplicate" ? f : { ...f, triage: { ...f.triage!, suspectedPrNumber: suspectPr(f, product, change) } },
-  );
+  const policy = input.policy ?? DEFAULT_TRIAGE_POLICY;
+  const deduped = dedupeFindings(results.flatMap((r) => r.findings)).map((f) => {
+    if (f.status === "duplicate") return f;
+    const attributed = { ...f, triage: { ...f.triage!, suspectedPrNumber: suspectPr(f, product, change) } };
+    // Below the reporting floor: keep the evidence, but it neither counts nor gates.
+    if (!atLeastAsSevere(f.severity, policy.minSeverity)) {
+      return {
+        ...attributed,
+        status: "dismissed" as const,
+        triage: { ...attributed.triage, note: [attributed.triage.note, `Below the fleet's ${policy.minSeverity} reporting floor.`].filter(Boolean).join(" ") },
+      };
+    }
+    return attributed;
+  });
   const canonical = deduped.filter((f) => f.status !== "duplicate" && f.status !== "dismissed");
 
   const visited = new Set<string>();
@@ -220,7 +242,7 @@ export function triage(input: TriageInput): TriageOutput {
   }
   const coverage = computeCoverage(product, visited, checked);
   const fleet = summarizeFleet(results, personas, agentsRequested);
-  const verdict: TriageOutput["verdict"] = canonical.some((f) => f.severity === "P0") ? "block" : "pass";
+  const verdict: TriageOutput["verdict"] = canonical.some((f) => atLeastAsSevere(f.severity, policy.blockOn)) ? "block" : "pass";
 
   return {
     findings: deduped,

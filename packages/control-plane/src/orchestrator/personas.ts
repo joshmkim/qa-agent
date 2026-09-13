@@ -1,12 +1,18 @@
-import type { Disposition, Persona, ProductContext } from "@qa-agent/shared-types";
+import { DEFAULT_FLEET_CONFIG, DISPOSITIONS, type Disposition, type Persona, type ProductContext } from "@qa-agent/shared-types";
 
-/** Fleet mix. Methodical agents carry coverage; the others find the weird bugs. */
-const MIX: Array<{ disposition: Disposition; weight: number }> = [
-  { disposition: "methodical", weight: 0.4 },
-  { disposition: "chaos-monkey", weight: 0.25 },
-  { disposition: "adversarial-fuzzer", weight: 0.2 },
-  { disposition: "impatient-user", weight: 0.15 },
-];
+/** Relative weights per disposition; any scale, normalized on use. */
+export type DispositionMix = Record<Disposition, number>;
+
+/** Default fleet mix. Methodical agents carry coverage; the others find the weird bugs. */
+export const DEFAULT_MIX: DispositionMix = DEFAULT_FLEET_CONFIG.dispositionMix;
+
+/** Weights as fractions summing to 1, in DISPOSITIONS order; an all-zero mix falls back to the default. */
+function normalizeMix(mix: DispositionMix): Array<{ disposition: Disposition; weight: number }> {
+  const total = DISPOSITIONS.reduce((n, d) => n + Math.max(0, mix[d] ?? 0), 0);
+  const source = total > 0 ? mix : DEFAULT_MIX;
+  const sum = DISPOSITIONS.reduce((n, d) => n + Math.max(0, source[d] ?? 0), 0);
+  return DISPOSITIONS.map((d) => ({ disposition: d, weight: Math.max(0, source[d] ?? 0) / sum }));
+}
 
 const NAMES: Record<Disposition, string[]> = {
   methodical: ["Methodical Maya", "Careful Chen", "Thorough Theo", "Diligent Dana", "Steady Sam"],
@@ -26,9 +32,9 @@ const DESCRIPTIONS: Record<Disposition, string> = {
  * Split `count` agents across dispositions by weight, largest-remainder so
  * small fleets still get at least one of the heavier dispositions.
  */
-export function allocateDispositions(count: number): Disposition[] {
+export function allocateDispositions(count: number, mix: DispositionMix = DEFAULT_MIX): Disposition[] {
   if (count <= 0) return [];
-  const raw = MIX.map((m) => ({ ...m, exact: m.weight * count }));
+  const raw = normalizeMix(mix).map((m) => ({ ...m, exact: m.weight * count }));
   const floors = raw.map((r) => Math.floor(r.exact));
   let remaining = count - floors.reduce((a, b) => a + b, 0);
   const order = raw
@@ -58,8 +64,13 @@ export function allocateDispositions(count: number): Disposition[] {
  * (every touched surface gets covered before any untouched one), then the
  * rest. Each agent gets a small, distinct slice so the fleet fans out.
  */
-export function buildPersonas(count: number, product: ProductContext, focusPerAgent = 3): Persona[] {
-  const dispositions = allocateDispositions(count);
+export function buildPersonas(
+  count: number,
+  product: ProductContext,
+  opts: { focusPerAgent?: number; mix?: DispositionMix } = {},
+): Persona[] {
+  const focusPerAgent = Math.max(1, opts.focusPerAgent ?? DEFAULT_FLEET_CONFIG.focusPerAgent);
+  const dispositions = allocateDispositions(count, opts.mix);
   const touched = product.surfaces.filter((s) => s.touchedByChange).map((s) => s.id);
   const rest = product.surfaces.filter((s) => !s.touchedByChange).map((s) => s.id);
   const ordered = [...touched, ...rest];

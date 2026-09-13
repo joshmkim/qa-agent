@@ -1,4 +1,5 @@
-import type { ChangeContext, ChangedFile, ContextBundle, Disposition, Surface } from "@qa-agent/shared-types";
+import { atLeastAsSevere, SEVERITIES } from "@qa-agent/shared-types";
+import type { ChangeContext, ChangedFile, ContextBundle, Disposition, Scrutiny, Severity, Surface } from "@qa-agent/shared-types";
 
 /** Character budget for rendered patches. ~4 chars/token; keep well under context. */
 const DEFAULT_PATCH_BUDGET = 60_000;
@@ -139,6 +140,32 @@ export interface PromptOptions {
   patchBudget?: number;
   /** Team-authored extra instructions appended verbatim. */
   extraInstructions?: string;
+  /** How readily to file findings. Default "balanced" (the rubric in file_finding). */
+  scrutiny?: Scrutiny;
+  /** Findings below this severity are not worth filing. Default P3 (file everything). */
+  minSeverity?: Severity;
+}
+
+const SCRUTINY_GUIDANCE: Record<Scrutiny, string> = {
+  relaxed:
+    "Reporting bar: relaxed. File only bugs you confirmed and that a real user would clearly notice: hard errors, flows that cannot be completed, wrong amounts or data. Do not file cosmetic issues, copy nits, minor slowness, or anything you could not reproduce; mention them briefly in done(summary) instead.",
+  balanced:
+    "Reporting bar: balanced. File confirmed bugs in primary and secondary flows, including ones with a workaround. Skip purely cosmetic issues unless they mislead the user or hide information they need.",
+  thorough:
+    "Reporting bar: thorough. File everything unexpected that you can confirm, including layout glitches, inconsistent or misspelled copy, slow responses, missing loading or error states, and accessibility problems (unlabeled controls, missing focus states). Use P3 for cosmetic items.",
+  exhaustive:
+    "Reporting bar: exhaustive. Report every deviation from what a careful reviewer would expect, however small: alignment and spacing, inconsistent wording, console warnings, redundant requests, missing focus states, unclear empty states. When in doubt, file it at P3; the triage judge collapses duplicates.",
+};
+
+/** Reporting guidance derived from the fleet's scrutiny + severity floor. Empty for the defaults. */
+export function renderReportingBar(opts: PromptOptions): string {
+  const lines: string[] = [];
+  if (opts.scrutiny && opts.scrutiny !== "balanced") lines.push(SCRUTINY_GUIDANCE[opts.scrutiny]);
+  if (opts.minSeverity && opts.minSeverity !== "P3") {
+    const kept = SEVERITIES.filter((s) => atLeastAsSevere(s, opts.minSeverity as Severity)).join(", ");
+    lines.push(`Severity floor: only file findings rated ${kept}. Anything less severe goes into done(summary) as a note, not a finding.`);
+  }
+  return lines.join("\n");
 }
 
 /** The agent's system prompt: who it is, what changed, what the product is, how to work. */
@@ -146,6 +173,7 @@ export function buildSystemPrompt(bundle: ContextBundle, opts: PromptOptions = {
   const { persona } = bundle;
   const minutes = Math.round(bundle.budgetSeconds / 60);
   const focus = persona.focusAreas.length ? persona.focusAreas.join(", ") : "wherever the change is most likely to have broken something";
+  const reportingBar = renderReportingBar(opts);
 
   return [
     `# Role`,
@@ -166,6 +194,7 @@ export function buildSystemPrompt(bundle: ContextBundle, opts: PromptOptions = {
     `- Locators: prefer refs from read_dom (e12) or visible text. If an element isn't found, the failure lists what is on screen; pick from it rather than retrying the same target.`,
     `- If a step fails three times, move on and mention it in done(untested).`,
     `- You have about ${minutes} minute${minutes === 1 ? "" : "s"}. You'll be warned when time is short; then call done with a summary and what you could not test.`,
+    reportingBar ? `\n# What to report\n${reportingBar}` : "",
     ``,
     `# Environment`,
     renderEnvironment(bundle),

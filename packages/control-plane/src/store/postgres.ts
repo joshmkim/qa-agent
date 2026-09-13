@@ -1,6 +1,8 @@
 import type { JSONValue, Sql } from "postgres";
-import type { DeployCursor, Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
-import type { Installation, Store } from "./index";
+import type { DeployCursor, Finding, FleetConfig, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { Installation, Store, StoredFleetConfig } from "./index";
+
+const FLEET_CONFIG_KEY = "fleet";
 
 const SEVERITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 } as const;
 
@@ -250,5 +252,24 @@ export class PostgresStore implements Store {
       INSERT INTO webhook_deliveries (id) VALUES (${deliveryId}) ON CONFLICT (id) DO NOTHING RETURNING id
     `;
     return rows.length > 0;
+  }
+
+  // --- fleet configuration ---
+
+  async getFleetConfig(): Promise<StoredFleetConfig | undefined> {
+    const [row] = await this.sql`SELECT data, updated_at FROM settings WHERE key = ${FLEET_CONFIG_KEY}`;
+    if (!row) return undefined;
+    return { config: row.data as FleetConfig, updatedAt: (row.updated_at as Date).toISOString() };
+  }
+  async putFleetConfig(config: FleetConfig): Promise<StoredFleetConfig> {
+    const [row] = await this.sql`
+      INSERT INTO settings (key, updated_at, data) VALUES (${FLEET_CONFIG_KEY}, now(), ${this.json(config)})
+      ON CONFLICT (key) DO UPDATE SET updated_at = now(), data = EXCLUDED.data
+      RETURNING data, updated_at
+    `;
+    return { config: row!.data as FleetConfig, updatedAt: (row!.updated_at as Date).toISOString() };
+  }
+  async deleteFleetConfig(): Promise<void> {
+    await this.sql`DELETE FROM settings WHERE key = ${FLEET_CONFIG_KEY}`;
   }
 }

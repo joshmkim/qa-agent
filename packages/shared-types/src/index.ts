@@ -11,4 +11,5 @@
 export * from "./agent-result";
 export * from "./context-bundle";
 export * from "./finding";
+export * from "./fleet-config";
 export * from "./pipeline";
