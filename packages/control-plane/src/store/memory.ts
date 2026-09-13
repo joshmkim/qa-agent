@@ -1,4 +1,4 @@
-import type { DeployCursor, Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { DeployCursor, Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
 import type { Installation, Store } from "./index";
 
 const DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -16,6 +16,9 @@ export class MemoryStore implements Store {
   private runCounters = new Map<string, number>();
   private deliveries = new Map<string, number>();
   private findings = new Map<string, Finding>();
+  /** `${repositoryId}:${commitSha}` -> snapshot */
+  private manifests = new Map<string, ManifestSnapshot>();
+  private latestManifest = new Map<string, ManifestSnapshot>();
 
   async upsertInstallation(inst: Installation): Promise<void> {
     this.installations.set(inst.installationId, inst);
@@ -143,6 +146,18 @@ export class MemoryStore implements Store {
   }
   async getFinding(findingId: string): Promise<Finding | undefined> {
     return this.findings.get(findingId);
+  }
+
+  async saveManifestSnapshot(repositoryId: string, snapshot: ManifestSnapshot): Promise<void> {
+    this.manifests.set(`${repositoryId}:${snapshot.commitSha}`, snapshot);
+    const latest = this.latestManifest.get(repositoryId);
+    if (!latest || latest.loadedAt <= snapshot.loadedAt) this.latestManifest.set(repositoryId, snapshot);
+  }
+  async getManifestSnapshot(repositoryId: string, commitSha: string): Promise<ManifestSnapshot | undefined> {
+    return this.manifests.get(`${repositoryId}:${commitSha}`);
+  }
+  async getLatestManifestSnapshot(repositoryId: string): Promise<ManifestSnapshot | undefined> {
+    return this.latestManifest.get(repositoryId);
   }
 
   async claimDelivery(deliveryId: string): Promise<boolean> {

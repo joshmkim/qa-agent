@@ -1,4 +1,5 @@
 import type { ChangeContext, ChangedFile, PullRequestRef } from "@qa-agent/shared-types";
+import { extractJiraKeysFrom } from "../jira/keys";
 import type { InstallationOctokit } from "./app";
 
 /** GitHub returns at most this many commits per compare page. */
@@ -98,6 +99,16 @@ export function extractLinkedIssues(body: string | null | undefined): string[] {
 }
 
 const REVERT_TITLE = /^Revert\s+"(.+)"\s*$/;
+/** "Merge pull request #12 from ..." (merge commit) or "Title (#12)" (squash). */
+const MERGE_MESSAGE = /^Merge pull request #(\d+)\b/;
+const SQUASH_TITLE = /\(#(\d+)\)\s*$/;
+
+/** PR number GitHub writes into merge and squash commit messages, if any. */
+export function prNumberFromMessage(message: string): number | undefined {
+  const firstLine = message.split("\n")[0] ?? "";
+  const m = MERGE_MESSAGE.exec(firstLine) ?? SQUASH_TITLE.exec(firstLine);
+  return m ? Number(m[1]) : undefined;
+}
 
 /**
  * A PR and its revert landing in the same window is a net no-op for QA
@@ -132,19 +143,33 @@ async function enrichPullRequests(
   commits: CompareCommit[],
 ): Promise<PullRequestRef[]> {
   // Merge commits and squash commits both map back to their PR through this
-  // endpoint; unmerged/draft PRs are filtered out below.
+  // endpoint; unmerged/draft PRs are filtered out below. GitHub indexes the
+  // association a few seconds after a merge, so a push webhook for the merge
+  // can see nothing; fall back to the PR number in the commit message, which
+  // is verified as merged by the pulls.get below.
   const perCommit = await mapWithConcurrency(commits, PR_LOOKUP_CONCURRENCY, async (c) => {
     const { data } = await octokit.rest.repos.listPullRequestsAssociatedWithCommit({
       ...ref,
       commit_sha: c.sha,
     });
-    return data.filter((pr) => pr.merged_at !== null).map((pr) => pr.number);
+    const merged = data.filter((pr) => pr.merged_at !== null).map((pr) => pr.number);
+    if (merged.length > 0) return merged;
+    const fromMessage = prNumberFromMessage(c.commit.message);
+    return fromMessage === undefined ? [] : [fromMessage];
   });
 
   const numbers = [...new Set(perCommit.flat())].sort((a, b) => a - b);
 
   const prs = await mapWithConcurrency(numbers, PR_LOOKUP_CONCURRENCY, async (pull_number) => {
-    const { data: pr } = await octokit.rest.pulls.get({ ...ref, pull_number });
+    let pr;
+    try {
+      ({ data: pr } = await octokit.rest.pulls.get({ ...ref, pull_number }));
+    } catch (err) {
+      // A "(#123)" in a commit title can point at a PR that doesn't exist here.
+      if ((err as { status?: number }).status === 404) return undefined;
+      throw err;
+    }
+    if (pr.merged_at === null) return undefined;
     const out: PullRequestRef = {
       number: pr.number,
       title: pr.title,
@@ -161,8 +186,9 @@ async function enrichPullRequests(
     return out;
   });
 
-  prs.sort((a, b) => a.mergedAt.localeCompare(b.mergedAt));
-  return collapseReverts(prs);
+  const merged = prs.filter((pr): pr is PullRequestRef => pr !== undefined);
+  merged.sort((a, b) => a.mergedAt.localeCompare(b.mergedAt));
+  return collapseReverts(merged);
 }
 
 /**
@@ -174,12 +200,15 @@ async function enrichPullRequests(
  * - Commit list is paginated past GitHub's 250/page cap.
  * - File count past the 300-file cap is reconstructed from PR metadata, and
  *   `filesTruncated` tells agents the file list is incomplete.
+ * - `jiraProjectKeys` turns on issue-key scanning of PR titles, bodies and
+ *   commit messages; empty means no Jira is configured and none is recorded.
  */
 export async function computeChangeContext(
   octokit: InstallationOctokit,
   ref: RepoRef,
   baseSha: string,
   headSha: string,
+  jiraProjectKeys: string[] = [],
 ): Promise<ChangeContext> {
   let result = await compare(octokit, ref, baseSha, headSha);
   let effectiveBase = baseSha;
@@ -199,6 +228,14 @@ export async function computeChangeContext(
       ? pullRequests.reduce((n, pr) => n + pr.filesChanged, 0)
       : result.files.length;
 
+  const jiraKeys = extractJiraKeysFrom(
+    [
+      ...pullRequests.flatMap((pr) => [pr.title, pr.body]),
+      ...result.commits.map((c) => c.commit.message),
+    ],
+    jiraProjectKeys,
+  );
+
   return {
     baseSha: effectiveBase,
     headSha,
@@ -206,6 +243,7 @@ export async function computeChangeContext(
     filesChanged,
     pullRequests,
     compareStatus: result.status,
+    ...(jiraKeys.length > 0 ? { jiraKeys } : {}),
     changedFiles: result.files,
     filesTruncated,
   };

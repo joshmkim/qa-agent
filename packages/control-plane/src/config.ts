@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { Severity } from "@qa-agent/shared-types";
 
 export interface GitHubConfig {
   appId: string;
@@ -20,15 +21,36 @@ export interface SlackConfig {
 
 export interface OrchestratorEnvConfig {
   concurrency: number;
+  /** Fallback per-agent budget when the stage doesn't set one. */
   agentBudgetSeconds: number;
   maxFleetSize: number;
   saturationThreshold: number;
+  /** Global URL boundaries added to every bundle on top of the manifest's. */
   blastRadiusBoundaries: string[];
   headless: boolean;
   /** Per-agent tool-call ceiling. */
   maxSteps: number;
   /** Record a .webm per agent session. */
   recordVideo: boolean;
+}
+
+export interface JiraConfig {
+  /** Site base URL, e.g. https://your-team.atlassian.net */
+  baseUrl: string;
+  /** Atlassian account email; used with the API token as HTTP Basic auth. */
+  email: string;
+  apiToken: string;
+  /** Project that findings are filed into, e.g. "QA". */
+  projectKey: string;
+  /** Issue type name on that project's create screen. */
+  issueType: string;
+  /**
+   * Project prefixes recognised when scanning PRs and commits for issue keys.
+   * Defaults to [projectKey]; widen it when code references other projects.
+   */
+  projectKeys: string[];
+  /** Least severe finding that gets filed. P3 files everything. */
+  minSeverity: Severity;
 }
 
 export interface Config {
@@ -39,6 +61,8 @@ export interface Config {
   github: GitHubConfig;
   /** Undefined when SLACK_BOT_TOKEN is unset; the bot is then disabled. */
   slack?: SlackConfig;
+  /** Undefined when JIRA_BASE_URL is unset; issue filing is then disabled. */
+  jira?: JiraConfig;
   /**
    * Undefined when ANTHROPIC_API_KEY is unset (or ORCHESTRATOR_ENABLED=false);
    * runs then stay "queued" until something external completes them.
@@ -109,6 +133,34 @@ function loadOrchestrator(env: NodeJS.ProcessEnv): OrchestratorEnvConfig | undef
   };
 }
 
+const SEVERITIES: readonly Severity[] = ["P0", "P1", "P2", "P3"];
+
+/** Jira is optional: enabled only when a site URL is present. */
+function loadJira(env: NodeJS.ProcessEnv): JiraConfig | undefined {
+  const baseUrl = env.JIRA_BASE_URL;
+  if (!baseUrl || baseUrl.trim() === "") return undefined;
+
+  const projectKey = required("JIRA_PROJECT_KEY").toUpperCase();
+  const extraKeys = (env.JIRA_PROJECT_KEYS ?? "")
+    .split(",")
+    .map((k) => k.trim().toUpperCase())
+    .filter(Boolean);
+  const minSeverity = (env.JIRA_MIN_SEVERITY ?? "P1").toUpperCase() as Severity;
+  if (!SEVERITIES.includes(minSeverity)) {
+    throw new Error(`JIRA_MIN_SEVERITY must be one of ${SEVERITIES.join(", ")}`);
+  }
+
+  return {
+    baseUrl: baseUrl.replace(/\/$/, ""),
+    email: required("JIRA_EMAIL"),
+    apiToken: required("JIRA_API_TOKEN"),
+    projectKey,
+    issueType: env.JIRA_ISSUE_TYPE ?? "Bug",
+    projectKeys: [...new Set([projectKey, ...extraKeys])],
+    minSeverity,
+  };
+}
+
 /** api.github.com -> github.com; ghes.example.com/api/v3 -> ghes.example.com */
 export function deriveWebBaseUrl(apiBaseUrl: string): string {
   const u = new URL(apiBaseUrl);
@@ -129,6 +181,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     publicUrl,
     webUrl: (env.WEB_URL ?? publicUrl).replace(/\/$/, ""),
     slack: loadSlack(env),
+    jira: loadJira(env),
     orchestrator: loadOrchestrator(env),
     github: {
       appId: required("GITHUB_APP_ID"),

@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
 import {
   isRunActive,
+  type ManifestSnapshot,
+  type ProductContext,
+  type RunContext,
   type ChangeContext,
   type CoverageSummary,
   type Finding,
@@ -17,6 +20,7 @@ import type { EventBus } from "../events";
 import type { GitHubApp } from "../github/app";
 import { completeCheck, createFailedCheck, createInProgressCheck, failCheck } from "../github/checks";
 import { computeChangeContext } from "../github/diff";
+import { DEFAULT_MANIFEST_PATH, loadManifest, markTouched } from "../manifest/load";
 import type { Store } from "../store";
 
 export interface RunServiceDeps {
@@ -25,6 +29,8 @@ export interface RunServiceDeps {
   events: EventBus;
   /** Builds the human-facing URL for a run (web UI), used in check runs and Slack. */
   runUrl: (run: Run) => string;
+  /** Jira project prefixes to recognise in PRs and commits; empty disables scanning. */
+  jiraProjectKeys?: string[];
 }
 
 export interface StartRunInput {
@@ -49,6 +55,10 @@ export interface CompleteRunInput {
   coverage: CoverageSummary;
   fleet: FleetSummary;
 }
+
+/** Per-agent wall-clock budget when the stage doesn't set one. */
+const DEFAULT_BUDGET_SECONDS = 45 * 60;
+const MAX_TOUCHED_LISTED = 15;
 
 export class RunError extends Error {
   constructor(
@@ -161,6 +171,7 @@ export class RunService {
       { owner: repo.owner, repo: repo.name },
       baseSha,
       headSha,
+      this.deps.jiraProjectKeys,
     );
   }
 
@@ -332,12 +343,35 @@ export class RunService {
       }
     }
 
+    const startedAt = new Date().toISOString();
+    const snapshot = await this.manifestAt(repository, input.headSha);
+    const product = snapshot.product && markTouched(snapshot.product, change);
+    const touched = product?.surfaces.filter((s) => s.touchedByChange) ?? [];
+
     const run = await this.newRun(stage, repository, {
       status: "queued",
       trigger: input.trigger,
       triggeredBy: input.triggeredBy,
       rerunOf: input.rerunOf,
       change,
+      startedAt,
+      manifest: {
+        path: snapshot.path,
+        commitSha: snapshot.commitSha,
+        status: snapshot.status,
+        errors: snapshot.errors,
+        loadedAt: snapshot.loadedAt,
+        version: product?.manifestVersion,
+      },
+      steps: [manifestStep(snapshot, product, change.filesTruncated === true, startedAt)],
+      coverage: {
+        surfacesTotal: product?.surfaces.length ?? 0,
+        surfacesVisited: 0,
+        changedSurfacesTotal: touched.length,
+        changedSurfacesVisited: 0,
+        invariantsTotal: product?.invariants.length ?? 0,
+        invariantsChecked: 0,
+      },
     });
 
     let started = run;
@@ -348,6 +382,7 @@ export class RunService {
         { owner: repository.owner, repo: repository.name },
         run,
         runUrl(run),
+        manifestSummary(snapshot, product),
       );
       started = await store.updateRun(run.id, { checkRunId });
     } catch (err) {
@@ -357,6 +392,108 @@ export class RunService {
 
     events.emit("run.started", { repository, stage, run: started });
     return started;
+  }
+
+  /**
+   * The QA manifest at a commit, cached per commit so re-runs don't refetch.
+   * Fetch errors are returned (and not cached) so a transient failure is
+   * retried by the next run; it never blocks the run itself.
+   */
+  async manifestAt(repository: Repository, commitSha: string): Promise<ManifestSnapshot> {
+    const cached = await this.deps.store.getManifestSnapshot(repository.id, commitSha);
+    if (cached && cached.status !== "error") return cached;
+    let snapshot: ManifestSnapshot;
+    try {
+      const octokit = await this.deps.github.getInstallationOctokit(repository.installationId);
+      snapshot = await loadManifest(octokit, { owner: repository.owner, repo: repository.name }, commitSha);
+    } catch (err) {
+      snapshot = {
+        path: DEFAULT_MANIFEST_PATH,
+        commitSha,
+        status: "error",
+        errors: [(err as Error).message],
+        loadedAt: new Date().toISOString(),
+      };
+    }
+    await this.deps.store.saveManifestSnapshot(repository.id, snapshot);
+    return snapshot;
+  }
+
+  /** The manifest a run used, with surfaces marked touched by that run's change. */
+  async runManifest(runId: string): Promise<ManifestSnapshot | undefined> {
+    const run = await this.deps.store.getRun(runId);
+    if (!run) throw new RunError(`Run ${runId} not found`, "run-not-found");
+    if (!run.manifest) return undefined;
+    const snapshot = await this.deps.store.getManifestSnapshot(run.repositoryId, run.manifest.commitSha);
+    if (!snapshot) return undefined;
+    return snapshot.product ? { ...snapshot, product: markTouched(snapshot.product, run.change) } : snapshot;
+  }
+
+  /**
+   * The pipeline's current manifest: the latest snapshot (touched flags from
+   * the newest run that used it), or loaded from the default branch head if
+   * no run has loaded one yet.
+   */
+  async pipelineManifest(repository: Repository): Promise<ManifestSnapshot> {
+    const latest = await this.deps.store.getLatestManifestSnapshot(repository.id);
+    if (latest) {
+      const run = (await this.deps.store.listRunsByRepository(repository.id)).find(
+        (r) => r.manifest?.commitSha === latest.commitSha,
+      );
+      return run && latest.product ? { ...latest, product: markTouched(latest.product, run.change) } : latest;
+    }
+    try {
+      const octokit = await this.deps.github.getInstallationOctokit(repository.installationId);
+      const { data } = await octokit.rest.repos.getBranch({
+        owner: repository.owner,
+        repo: repository.name,
+        branch: repository.defaultBranch,
+      });
+      return await this.manifestAt(repository, data.commit.sha);
+    } catch (err) {
+      return {
+        path: DEFAULT_MANIFEST_PATH,
+        commitSha: "",
+        status: "error",
+        errors: [(err as Error).message],
+        loadedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  /**
+   * Everything every agent in a run shares: the change under test, product
+   * knowledge from the manifest, and the stage's environment. The
+   * orchestrator adds agentId, persona and saturated surfaces per agent.
+   */
+  async contextFor(runId: string): Promise<RunContext> {
+    const run = await this.deps.store.getRun(runId);
+    if (!run) throw new RunError(`Run ${runId} not found`, "run-not-found");
+    const stage = await this.deps.store.getStage(run.stageId);
+    if (!stage) throw new RunError(`Stage ${run.stageId} not found`, "stage-not-found");
+    const repository = await this.repoFor(stage);
+    const manifest = await this.runManifest(runId);
+    const product: ProductContext = manifest?.product ?? {
+      productName: repository.name,
+      intent: "",
+      stakeholders: [],
+      surfaces: [],
+      invariants: [],
+      manifestVersion: "none",
+      boundaries: [],
+    };
+    return {
+      runId: run.id,
+      change: run.change,
+      product,
+      environment: {
+        stageName: stage.name,
+        baseUrl: stage.environmentUrl ?? "",
+        credentialsRef: stage.credentialsRef ?? "",
+        blastRadiusBoundaries: product.boundaries ?? [],
+      },
+      budgetSeconds: stage.budgetSeconds ?? DEFAULT_BUDGET_SECONDS,
+    };
   }
 
   /** Loads a run that must still be in flight, with its stage and repository. */
@@ -428,7 +565,15 @@ export class RunService {
     if (run.checkRunId !== undefined) {
       try {
         const octokit = await github.getInstallationOctokit(repository.installationId);
-        await completeCheck(octokit, { owner: repository.owner, repo: repository.name }, run, runUrl(run));
+        const snapshot = run.manifest && (await store.getManifestSnapshot(repository.id, run.manifest.commitSha));
+        const product = snapshot?.product && markTouched(snapshot.product, run.change);
+        await completeCheck(
+          octokit,
+          { owner: repository.owner, repo: repository.name },
+          run,
+          runUrl(run),
+          snapshot ? manifestSummary(snapshot, product) : [],
+        );
       } catch (err) {
         console.error(`[runs] failed to complete check run for ${run.id}:`, err);
       }
@@ -468,4 +613,64 @@ export class RunService {
     events.emit("run.finished", { repository, stage, run });
     return run;
   }
+}
+
+/** The "Load QA manifest" step recorded on every run. */
+function manifestStep(
+  snapshot: ManifestSnapshot,
+  product: ProductContext | undefined,
+  filesTruncated: boolean,
+  at: string,
+): RunStep {
+  const base = { id: randomUUID(), name: "Load QA manifest", startedAt: at, finishedAt: at };
+  const short = snapshot.commitSha.slice(0, 7);
+  switch (snapshot.status) {
+    case "loaded": {
+      const touched = product?.surfaces.filter((s) => s.touchedByChange).length ?? 0;
+      return {
+        ...base,
+        status: "succeeded",
+        detail:
+          `${snapshot.path} @ ${product?.manifestVersion}: ${product?.surfaces.length} surfaces (${touched} touched), ` +
+          `${product?.invariants.length} invariants` +
+          (filesTruncated ? "; file list truncated, so every mapped surface counts as touched" : ""),
+      };
+    }
+    case "missing":
+      return { ...base, status: "skipped", detail: `No ${snapshot.path} at ${short}; agents run without product context` };
+    case "invalid":
+      return {
+        ...base,
+        status: "failed",
+        detail: `${snapshot.path} at ${short} is invalid (${snapshot.errors?.length ?? 0} error(s)): ${snapshot.errors?.join("; ")}`,
+      };
+    case "error":
+      return { ...base, status: "failed", detail: `Could not read ${snapshot.path} at ${short}: ${snapshot.errors?.join("; ")}` };
+  }
+}
+
+/** Markdown lines for the GitHub check summary. */
+function manifestSummary(snapshot: ManifestSnapshot, product: ProductContext | undefined): string[] {
+  const lines = ["", "### QA manifest"];
+  if (snapshot.status !== "loaded" || !product) {
+    const why =
+      snapshot.status === "missing"
+        ? `No \`${snapshot.path}\` in this commit; agents run without surfaces or invariants.`
+        : `\`${snapshot.path}\` could not be used (${snapshot.status}):\n` +
+          (snapshot.errors ?? []).map((e) => `- ${e}`).join("\n");
+    lines.push(why);
+    return lines;
+  }
+  const touched = product.surfaces.filter((s) => s.touchedByChange);
+  lines.push(
+    `\`${snapshot.path}\` @ \`${product.manifestVersion}\`: ${product.surfaces.length} surfaces, ${product.invariants.length} invariants`,
+  );
+  if (touched.length === 0) {
+    lines.push("", "_No mapped surfaces touched by this change._");
+  } else {
+    lines.push("", `**Surfaces touched by this change (${touched.length})**`);
+    for (const s of touched.slice(0, MAX_TOUCHED_LISTED)) lines.push(`- ${s.name} (\`${s.locator}\`)`);
+    if (touched.length > MAX_TOUCHED_LISTED) lines.push(`- _…and ${touched.length - MAX_TOUCHED_LISTED} more_`);
+  }
+  return lines;
 }

@@ -35,21 +35,23 @@ in order.
       token usage from `ModelResponse.usage` to the result) before raising
       the fleet cap.
 
-## 2. Depends on the QA manifest work (other owner)
+## 2. QA manifest (landed on main; merged)
 
-The orchestrator consumes `ProductContext` through `ManifestProvider`
-(`src/orchestrator/manifest.ts`). `FallbackManifestProvider` returns an empty
-inventory today, which means:
+The orchestrator now reads `RunService.contextFor(runId)`: the manifest
+snapshot loaded at the run's head commit, with `touchedByChange` derived
+from each surface's `sources` globs. The fork's `.qa/manifest.yaml` has 26
+surfaces and 10 invariants, so fleet runs get real coverage numbers.
+Remaining:
 
-- coverage is reported as "unmeasured" and confidence is capped (0.6 factor),
-- `file_finding` accepts any `surfaceId` slug,
-- personas get no focus areas and pick their own starting points,
-- `markTouchedSurfaces` (path-token heuristic) has nothing to mark.
-
-When the loader exists: implement `ManifestProvider.load(repository, sha)`,
-swap it in `src/index.ts`, and consider letting the manifest declare
-surface -> file globs so `touchedByChange` stops being a heuristic. Also
-snapshot the manifest version onto the run (pipeline-steps Phase 3).
+- `Invariant.surfaceIds` and `product.boundaries` are rendered in the prompt;
+  `ManifestSnapshot.status` of `missing`/`invalid` still yields an empty
+  product (agents discover surfaces themselves, coverage "unmeasured").
+- The manifest's `boundaries` are policy text. URL-level blocking is still
+  the global `AGENT_BLAST_RADIUS`; consider a `blocked_urls` list in the
+  manifest so teams own both.
+- `scripts/bundle-from-manifest.ts` duplicates the YAML -> ProductContext
+  mapping for standalone runs; point it at `manifest/load.ts` once that
+  module exposes a file-path entry point.
 
 ## 3. Environment and credentials (single-tenant shortcuts to productize)
 

@@ -44,7 +44,8 @@ Every action self-recovers and returns structured failure.
 - Novel mode: conversational interrogation of the fleet's collective run data
   ("did anyone hit the address form with a non-US locale?").
 - Headline output is a confidence statement with surface-inventory coverage %.
-- Deliver findings where work happens: check runs, PR comments.
+- Deliver findings where work happens: check runs, PR comments, Slack
+  reports, and Jira issues in the team's existing backlog.
 
 ## Key design decisions still open per-org
 - State isolation: per-agent test accounts vs. per-agent sandboxed stacks.
@@ -106,6 +107,21 @@ reason `packages/agent` pins `playwright@1.61.0` (1.62 requires Node 20) and
 `@anthropic-ai/sdk@0.125.0`. Postgres still planned for runs/findings; today
 the store is an in-memory implementation behind a `Store` interface.
 
+## Integration pattern (decided)
+How every reporting sink is wired, established by Slack and followed by Jira.
+Future sinks (email, PagerDuty, PR comments) should look the same.
+- Sinks subscribe to the `EventBus`; run logic never calls them. Adding one
+  touches no core code.
+- Outbound only by default. Anything inbound (webhooks, slash commands, OAuth
+  callbacks) needs a public HTTPS endpoint, which is the dependency that got
+  Slack's slash commands cut from its MVP. Pay it only when a feature earns
+  it; both Slack and Jira deliver their value without it.
+- A sink failing must never affect the gate. The bus isolates subscribers, and
+  each sink isolates its own units of work on top of that, so a dead token or
+  an outage degrades reporting and nothing else.
+- Config is optional and absence disables the sink, so a fresh clone boots
+  with no third-party accounts at all.
+
 ## First milestone (built, exercised against a real App on 2026-09-13)
 Verified on `TrentK014/nike-storefront` with stages `beta -> main`: deploy
 detection, change context, check runs, branch-protection gate, GitHub
@@ -120,7 +136,7 @@ check run on the head SHA -> `run.started` event. Orchestrator later calls
 
 Layout:
 - `src/config.ts` env loading (GitHub PEM inline or path, GHES base URL,
-  optional Slack).
+  optional Slack, optional Jira).
 - `src/events.ts` `EventBus` with `deployment.detected`, `deployment.failed`,
   `run.started`, `run.finished`. Integrations subscribe here, not in the run service.
 - `src/github/app.ts` App factory + install URL.
@@ -148,6 +164,11 @@ Layout:
 - `src/orchestrator/` fleet orchestrator + triage judge (see "Agent runtime
   and orchestration" below). Subscribes to `run.started`; enabled when
   `ANTHROPIC_API_KEY` is set.
+- `src/jira/` optional, outbound only: files findings at or above
+  `JIRA_MIN_SEVERITY` as issues on `run.finished`, deduping on a
+  `qafleet-<dedupeKey>` label stored in Jira rather than locally, and scans
+  the change window for issue keys (`ChangeContext.jiraKeys`). Also no
+  inbound routes. See `jira-next-steps.md`.
 - `src/store/` `Store` interface + `MemoryStore` (installations, repos,
   stages, cursors, runs, findings, delivery dedupe).
 
@@ -198,9 +219,13 @@ Agent (`packages/agent/src`):
   `scripts/smoke.ts` scripted model vs a local storefront with planted bugs.
 
 Orchestrator (`packages/control-plane/src/orchestrator`):
-- `manifest.ts` `ManifestProvider` seam for the QA manifest work (owned
-  separately) + `FallbackManifestProvider` (empty inventory) +
-  `markTouchedSurfaces` heuristic from changed file paths.
+- Context comes from `RunService.contextFor(runId)` (`RunContext`: change,
+  the run's QA manifest snapshot with `touchedByChange` from `sources`
+  globs, stage environment and `Stage.budgetSeconds`). The orchestrator adds
+  agentId, persona, saturated surfaces, and replaces
+  `environment.blastRadiusBoundaries` with the URL-level `AGENT_BLAST_RADIUS`
+  list: the manifest's `boundaries` are policy sentences, rendered to the
+  agent from `product.boundaries`, not URL rules.
 - `personas.ts` disposition mix 40/25/20/15 (largest remainder, interleaved
   so every wave is mixed); focus areas rotate through touched surfaces first.
 - `discovery.ts` `DiscoveryBoard`: a surface is saturated after
@@ -266,11 +291,27 @@ Deferred / known gaps:
 - `@slack/web-api` is pinned to 7.x (8.x needs Node 20), same reason as the
   Octokit pins.
 
+## QA manifest (built)
+`.qa/manifest.yaml` in the repo under test, format in `docs/qa-manifest.md`:
+product intent, surfaces (with `sources` globs mapping them to code),
+invariants (with severity and optional surface refs), and boundaries.
+- Loaded at each run's head SHA and cached per `(repository, commit)`;
+  `Run.manifest` records path, commit, status, and version (short blob SHA).
+- Missing/invalid manifests never block a run: a skipped/failed "Load QA
+  manifest" step and a note on the GitHub check.
+- `touchedByChange` is computed per run from `change.changedFiles`; the
+  check lists touched surfaces and coverage totals are filled at run start.
+- `GET /api/runs/:id/context` returns `RunContext` (change + product +
+  environment). The orchestrator adds agentId, persona and saturated
+  surfaces to make each agent's `ContextBundle`. Stage `credentialsRef` and
+  `budgetSeconds` feed the environment.
+- Authoring: `pnpm --filter @qa-agent/control-plane manifest:check <file>`.
+
 ## Web integration (built)
 `packages/web/src/lib/data.ts` is the only data seam. It uses
 `src/lib/data/control-plane.ts` (server-side fetches to `CONTROL_PLANE_URL`,
 `no-store`) when `CONTROL_PLANE_URL` is set or `DATA_SOURCE=api`, and the
-fixtures in `src/lib/data/mock.ts` otherwise. QA manifest reads (surfaces,
-invariants) stay on fixtures until the manifest loader exists. Pages that
+fixtures in `src/lib/data/mock.ts` otherwise. The Manifest tab and finding
+pages read the manifest snapshot the run used. Pages that
 show in-flight runs poll with `router.refresh()` every 15s. Remaining
 integration work is tracked in `pipeline-steps.MD`.

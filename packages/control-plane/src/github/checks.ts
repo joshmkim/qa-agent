@@ -14,6 +14,8 @@ export async function createInProgressCheck(
   ref: RepoRef,
   run: Run,
   detailsUrl: string,
+  /** Extra markdown lines, e.g. the QA manifest and touched surfaces. */
+  extra: string[] = [],
 ): Promise<number> {
   const { data } = await octokit.rest.checks.create({
     ...ref,
@@ -25,7 +27,7 @@ export async function createInProgressCheck(
     started_at: run.startedAt,
     output: {
       title: `Run #${run.number} exploring ${run.change.pullRequests.length} PR(s)`,
-      summary: summarizeChange(run),
+      summary: [summarizeChange(run), ...extra].join("\n"),
     },
   });
   return data.id;
@@ -42,6 +44,7 @@ export async function completeCheck(
   ref: RepoRef,
   run: Run,
   detailsUrl: string,
+  extra: string[] = [],
 ): Promise<void> {
   if (run.checkRunId === undefined) {
     throw new Error(`Run ${run.id} has no check run to complete`);
@@ -58,7 +61,7 @@ export async function completeCheck(
     details_url: detailsUrl,
     output: {
       title: run.confidenceStatement ?? `Run #${run.number} ${run.verdict}`,
-      summary: summarizeVerdict(run),
+      summary: [summarizeVerdict(run), ...extra].join("\n"),
     },
   });
 }

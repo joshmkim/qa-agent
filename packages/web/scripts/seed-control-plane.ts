@@ -7,7 +7,7 @@
  */
 import type { Run, Stage } from "@qa-agent/shared-types";
 import { findings } from "../src/lib/mock/findings";
-import { repository, stages } from "../src/lib/mock/pipeline";
+import { manifestSnapshot, repository, stages } from "../src/lib/mock/pipeline";
 import { runBeta47, runs } from "../src/lib/mock/runs";
 
 const baseUrl = (process.env.CONTROL_PLANE_URL ?? "http://localhost:3001").replace(/\/$/, "");
@@ -51,6 +51,22 @@ const seededStages: Stage[] = stages.map((s) =>
   s.id === runBeta48.stageId ? { ...s, cursor: { sha: liveHeadSha, updatedAt: runBeta48.startedAt } } : s,
 );
 
+// Every fixture run used the fixture manifest at its own head commit.
+const allRuns = [...runs, runBeta48].map((run) => ({
+  ...run,
+  manifest: {
+    path: manifestSnapshot.path,
+    commitSha: run.change.headSha,
+    status: manifestSnapshot.status,
+    loadedAt: run.startedAt,
+    version: manifestSnapshot.product?.manifestVersion,
+  },
+}));
+const manifests = [...new Set(allRuns.map((r) => r.change.headSha))].map((commitSha) => ({
+  repositoryId: repository.id,
+  snapshot: { ...manifestSnapshot, commitSha },
+}));
+
 const body = {
   installations: [
     {
@@ -64,8 +80,9 @@ const body = {
   ],
   repositories: [repository],
   stages: seededStages,
-  runs: [...runs, runBeta48],
+  runs: allRuns,
   findings,
+  manifests,
 };
 
 async function main() {

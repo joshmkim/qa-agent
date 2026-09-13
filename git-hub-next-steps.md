@@ -91,15 +91,21 @@ so the next push retries from the same base. Re-running that run from GitHub
 recomputes the diff from the original base and advances the cursor only if
 it still points at that base.
 
-## 3. Durable storage
+## 3. Durable storage (done)
 
-`MemoryStore` loses everything on restart, including installations. The
-`Store` interface in `src/store/index.ts` is the seam.
+`PostgresStore` (`src/store/postgres.ts`) is used whenever `DATABASE_URL` is
+set; `MemoryStore` remains the reference implementation and the fallback.
 
-- [ ] Postgres implementation. Tables: installations, repositories, stages,
-      runs, findings, webhook_deliveries. `advanceCursor` becomes
-      `UPDATE stages SET cursor = $next WHERE id = $id AND cursor->>'sha' = $expected`.
-- [ ] Delivery dedupe with a TTL (the memory version expires after 24h).
+- [x] Postgres implementation. Tables: installations, repositories, stages,
+      run_counters, runs, findings, manifest_snapshots, webhook_deliveries
+      (`migrations/*.sql`, applied on boot under an advisory lock).
+      `advanceCursor` is a single compare-and-set `UPDATE ... WHERE cursor_sha = $expected`.
+- [x] Delivery dedupe with a 24h TTL, persisted across restarts.
+- [x] Verified on `TrentK014/nike-storefront`: install, stages, cursor, runs
+      and delivery dedupe survive control-plane restarts; the next push diffs
+      from the stored cursor. `POST /github/installations/:id/sync` now also
+      records the installation if its webhook was missed.
+- [ ] Hosted Postgres and backups once the control plane is deployed.
 - [ ] On boot, if the store is empty, offer `POST /github/installations/:id/sync`
       or iterate `app.eachInstallation` to rebuild the repo inventory.
 

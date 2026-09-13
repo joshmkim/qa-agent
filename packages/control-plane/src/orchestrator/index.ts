@@ -2,12 +2,10 @@ import type { AgentResult, ContextBundle, Persona, Repository, Run, Stage } from
 import type { EventBus } from "../events";
 import { RunError, type RunService } from "../runs/service";
 import { DiscoveryBoard } from "./discovery";
-import { markTouchedSurfaces, type ManifestProvider } from "./manifest";
 import { buildPersonas } from "./personas";
 import { runWave, type AgentRunner } from "./runner";
 import { triage } from "./triage";
 
-export { FallbackManifestProvider, type ManifestProvider } from "./manifest";
 export { InProcessAgentRunner, type AgentRunner } from "./runner";
 export { triage, dedupeFindings } from "./triage";
 export { buildPersonas, allocateDispositions } from "./personas";
@@ -15,20 +13,23 @@ export { buildPersonas, allocateDispositions } from "./personas";
 export interface OrchestratorConfig {
   /** Agents in flight at once. Each is a Chromium instance. */
   concurrency: number;
-  /** Wall-clock budget per agent. */
+  /** Fallback per-agent budget; `Stage.budgetSeconds` wins when set. */
   agentBudgetSeconds: number;
   /** Cap on stage.fleetSize for cost control; 0 = no cap. */
   maxFleetSize: number;
   /** Visits before a surface counts as saturated for later waves. */
   saturationThreshold: number;
-  /** Global blast-radius boundaries added to every bundle (per-stage config later). */
+  /**
+   * URL-level boundaries (hosts, path prefixes) the browser blocks outright,
+   * added to every bundle. Distinct from the manifest's `boundaries`, which
+   * are policy sentences the agent reads.
+   */
   blastRadiusBoundaries: string[];
 }
 
 export interface OrchestratorDeps {
   runs: RunService;
   events: EventBus;
-  manifest: ManifestProvider;
   runner: AgentRunner;
   config: OrchestratorConfig;
   log?: (msg: string) => void;
@@ -69,35 +70,38 @@ export class Orchestrator {
       if (!stage.environmentUrl) {
         throw new OrchestrationError(`Stage "${stage.name}" has no environmentUrl; set it via PUT /api/repositories/${repository.fullName}/stages/${stage.name}`);
       }
-      const baseUrl = stage.environmentUrl;
-      const product = markTouchedSurfaces(await this.deps.manifest.load(repository, run.change.headSha), run.change);
+      // The run service owns context assembly: change window, the QA manifest
+      // snapshot for this run (surfaces already marked touched), stage
+      // environment and budget. We add the per-agent fields.
+      const shared = await runs.contextFor(run.id);
+      const product = shared.product;
       const fleetSize = config.maxFleetSize > 0 ? Math.min(stage.fleetSize, config.maxFleetSize) : stage.fleetSize;
       if (fleetSize <= 0) throw new OrchestrationError(`Stage "${stage.name}" has fleetSize ${stage.fleetSize}`);
       const personas = buildPersonas(fleetSize, product);
       const touched = product.surfaces.filter((s) => s.touchedByChange).length;
+      const budgetSeconds = stage.budgetSeconds ?? config.agentBudgetSeconds;
 
       await runs.progress(run.id, "assembling-context", {
         name: STEP_CONTEXT,
         status: "succeeded",
-        detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; manifest ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize}`,
+        detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; manifest ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize} x ${budgetSeconds}s`,
       });
       await runs.progress(run.id, "exploring", { name: STEP_FLEET, status: "running", detail: `0/${fleetSize} agents done` });
 
       const board = new DiscoveryBoard(config.saturationThreshold);
       const results: AgentResult[] = [];
       const bundleFor = (persona: Persona, i: number): ContextBundle => ({
-        runId: run.id,
+        ...shared,
         agentId: `${run.id.slice(0, 8)}-a${String(i + 1).padStart(3, "0")}`,
         persona,
-        change: run.change,
-        product,
         environment: {
-          stageName: stage.name,
-          baseUrl,
-          credentialsRef: `stage:${stage.id}`,
+          ...shared.environment,
+          // The manifest's `boundaries` are policy sentences rendered from
+          // product.boundaries; only URL rules belong here (the browser
+          // blocks matching requests).
           blastRadiusBoundaries: config.blastRadiusBoundaries,
         },
-        budgetSeconds: config.agentBudgetSeconds,
+        budgetSeconds,
         saturatedSurfaceIds: board.saturatedSurfaceIds(),
       });
 

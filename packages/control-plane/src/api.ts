@@ -69,6 +69,13 @@ export function apiRoutes(deps: ApiDeps): Hono {
     );
   });
 
+  /** The pipeline's current QA manifest (status "missing"/"invalid"/"error" are 200s). */
+  app.get("/pipelines/:id/manifest", async (c) => {
+    const repo = await store.getRepository(c.req.param("id"));
+    if (!repo) return c.json({ error: "repository-not-found" }, 404);
+    return c.json(await runs.pipelineManifest(repo));
+  });
+
   app.get("/pipelines/:id/findings", async (c) => {
     const repo = await store.getRepository(c.req.param("id"));
     if (!repo) return c.json({ error: "repository-not-found" }, 404);
@@ -104,6 +111,8 @@ export function apiRoutes(deps: ApiDeps): Hono {
       branch: body.branch ?? existing?.branch ?? name,
       order: body.order ?? existing?.order ?? 0,
       environmentUrl: body.environmentUrl ?? existing?.environmentUrl,
+      credentialsRef: body.credentialsRef ?? existing?.credentialsRef,
+      budgetSeconds: body.budgetSeconds ?? existing?.budgetSeconds,
       cursor: existing?.cursor,
       gatesPromotion: body.gatesPromotion ?? existing?.gatesPromotion ?? true,
       autoRun: body.autoRun ?? existing?.autoRun ?? true,
@@ -162,6 +171,15 @@ export function apiRoutes(deps: ApiDeps): Hono {
     const run = await store.getRun(c.req.param("id"));
     return run ? c.json(run) : c.json({ error: "run-not-found" }, 404);
   });
+
+  /** The manifest this run used, with surfaces marked touched by its change. */
+  app.get("/runs/:id/manifest", async (c) => {
+    const manifest = await runs.runManifest(c.req.param("id"));
+    return manifest ? c.json(manifest) : c.json({ error: "manifest-not-found" }, 404);
+  });
+
+  /** RunContext: change + product + environment shared by every agent in the run. */
+  app.get("/runs/:id/context", async (c) => c.json(await runs.contextFor(c.req.param("id"))));
 
   app.get("/runs/:id/findings", async (c) => {
     const run = await store.getRun(c.req.param("id"));

@@ -1,4 +1,5 @@
 import type { Pipeline, Repository } from "@qa-agent/shared-types";
+import { DEFAULT_MANIFEST_PATH } from "./manifest/load";
 import type { Store } from "./store";
 
 /**
@@ -7,18 +8,18 @@ import type { Store } from "./store";
  * links (check runs, Slack) put in `/pipelines/:id`.
  */
 export async function toPipeline(store: Store, repository: Repository): Promise<Pipeline> {
-  const [stages, installation] = await Promise.all([
+  const [stages, installation, manifest] = await Promise.all([
     store.listStages(repository.id),
     store.getInstallation(repository.installationId),
+    store.getLatestManifestSnapshot(repository.id),
   ]);
   return {
     id: repository.id,
     repository,
     name: repository.name,
     stages,
-    // Placeholders until the manifest loader lands (pipeline-steps.MD Phase 3).
-    manifestPath: ".qa/manifest.yaml",
-    manifestVersion: "unloaded",
+    manifestPath: manifest?.path ?? DEFAULT_MANIFEST_PATH,
+    manifestVersion: manifest?.product?.manifestVersion ?? (manifest ? manifest.status : "none"),
     createdAt: installation?.installedAt ?? new Date().toISOString(),
   };
 }

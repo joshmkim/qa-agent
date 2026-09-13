@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import type { Finding, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
 import type { Installation, Store } from "./store";
 
 export interface SeedBody {
@@ -8,6 +8,7 @@ export interface SeedBody {
   stages: Stage[];
   runs: Run[];
   findings?: Finding[];
+  manifests?: { repositoryId: string; snapshot: ManifestSnapshot }[];
 }
 
 /**
@@ -23,6 +24,7 @@ export function devRoutes(store: Store): Hono {
     for (const inst of body.installations ?? []) await store.upsertInstallation(inst);
     for (const repo of body.repositories ?? []) await store.upsertRepository(repo);
     for (const stage of body.stages ?? []) await store.upsertStage(stage);
+    for (const m of body.manifests ?? []) await store.saveManifestSnapshot(m.repositoryId, m.snapshot);
     // Oldest first so each stage's latestRunId ends on its newest run.
     const runs = [...(body.runs ?? [])].sort((a, b) => a.startedAt.localeCompare(b.startedAt));
     for (const run of runs) await store.createRun(run);
@@ -37,6 +39,7 @@ export function devRoutes(store: Store): Hono {
       stages: body.stages?.length ?? 0,
       runs: runs.length,
       findings: body.findings?.length ?? 0,
+      manifests: body.manifests?.length ?? 0,
     });
   });
 

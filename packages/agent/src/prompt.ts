@@ -109,8 +109,14 @@ export function renderProduct(bundle: ContextBundle): string {
   if (product.invariants.length) {
     lines.push("", "## Invariants (violations are findings at the listed severity)");
     for (const inv of product.invariants) {
-      lines.push(`- ${inv.id} [${inv.severityOnViolation}]: ${inv.statement}${inv.check ? `  (check: ${inv.check})` : ""}`);
+      const where = inv.surfaceIds?.length ? `  (observe on: ${inv.surfaceIds.join(", ")})` : "";
+      lines.push(`- ${inv.id} [${inv.severityOnViolation}]: ${inv.statement}${inv.check ? `  (check: ${inv.check})` : ""}${where}`);
     }
+  }
+
+  if (product.boundaries?.length) {
+    lines.push("", "## Team rules (policy; always follow)");
+    for (const b of product.boundaries) lines.push(`- ${b}`);
   }
   return lines.join("\n");
 }

@@ -1,4 +1,5 @@
 import type {
+  ManifestSnapshot,
   Pipeline,
   Repository,
   Stage,
@@ -201,3 +202,20 @@ export const invariants: Invariant[] = [
     severityOnViolation: "P1",
   },
 ];
+
+/** The manifest the fixture runs used, as the control plane would serve it. */
+export const manifestSnapshot: ManifestSnapshot = {
+  path: pipeline.manifestPath,
+  commitSha: "9f3c1e2a7b4d5f6081a2b3c4d5e6f70819a2b3c4",
+  status: "loaded",
+  loadedAt: "2026-09-13T15:42:11Z",
+  product: {
+    productName: "Acme Storefront",
+    intent: "Shoppers find products, build a cart, and check out with saved addresses and promo codes.",
+    stakeholders: ["storefront team", "payments team"],
+    surfaces,
+    invariants,
+    manifestVersion: pipeline.manifestVersion,
+    boundaries: ["Never use real payment cards; use the payments sandbox test cards only."],
+  },
+};

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { ActionStep, Evidence } from "@qa-agent/shared-types";
-import { getFinding, getInvariant, getPipeline, getRun, getSurface } from "@/lib/data";
+import { getFinding, getPipeline, getRun, getRunManifest } from "@/lib/data";
 import { FindingStatusIndicator, oracleLabel } from "@/components/findings-table";
 import {
   Button,
@@ -24,10 +24,10 @@ export default async function FindingPage({
   const { pipelineId, runId, findingId } = await params;
   const [pipeline, run, finding] = await Promise.all([getPipeline(pipelineId), getRun(runId), getFinding(findingId)]);
   if (!pipeline || !run || !finding || finding.runId !== run.id) notFound();
-  const [surface, invariant] = await Promise.all([
-    getSurface(finding.surfaceId),
-    finding.invariantId ? getInvariant(finding.invariantId) : undefined,
-  ]);
+  // Look up against the manifest this run used, not whatever is on the branch now.
+  const product = (await getRunManifest(run.id))?.product;
+  const surface = product?.surfaces.find((s) => s.id === finding.surfaceId);
+  const invariant = finding.invariantId ? product?.invariants.find((i) => i.id === finding.invariantId) : undefined;
 
   const suspectPr = finding.triage?.suspectedPrNumber
     ? run.change.pullRequests.find((p) => p.number === finding.triage?.suspectedPrNumber)
@@ -62,6 +62,14 @@ export default async function FindingPage({
             </span>
             <span className="text-text-secondary">·</span>
             <span className="text-text-secondary">Reported {formatDateTime(finding.reportedAt)}</span>
+            {finding.trackedIssue && (
+              <>
+                <span className="text-text-secondary">·</span>
+                <a href={finding.trackedIssue.url} target="_blank" rel="noreferrer" className="mono">
+                  {finding.trackedIssue.key}
+                </a>
+              </>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-2">

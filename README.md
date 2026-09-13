@@ -6,8 +6,10 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 
 - `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
 - `packages/shared-types` – the two real contracts (`ContextBundle`, `Finding`) plus control-plane data shapes (`Pipeline`, `Stage`, `Run`).
-- `packages/control-plane` – GitHub App, webhooks, cursors/diff, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
+- `packages/control-plane` – GitHub App, webhooks, cursors/diff, QA manifest loading, check runs, HTTP API, and the fleet orchestrator + triage judge (`src/orchestrator/`). See "Control plane" and "Agent fleet" below.
 - `packages/agent` – the exploration agent runtime: Playwright browser session, self-recovering tool primitives (click, type, navigate, read_dom, call_api, ...), reporting tools (file_finding, check_invariant), and the model loop. Spawned N times per run by the orchestrator; also runnable standalone from a `ContextBundle` JSON.
+
+The repository under test describes itself to the fleet with a QA manifest at `.qa/manifest.yaml`; see [`docs/qa-manifest.md`](docs/qa-manifest.md).
 
 ## Getting started
 
@@ -16,6 +18,15 @@ Requires Node 18.18+ and pnpm 9 (`corepack enable` will pick up the pinned versi
 ```bash
 pnpm install
 pnpm dev          # web on http://localhost:3000
+```
+
+The control plane stores data in Postgres when `DATABASE_URL` is set (in-memory otherwise, lost on restart). Local database and tests:
+
+```bash
+pnpm db:up        # Postgres 16 in Docker on localhost:5433 (databases qa_agent, qa_agent_test)
+# packages/control-plane/.env: DATABASE_URL=postgres://qa:qa@localhost:5433/qa_agent
+pnpm --filter @qa-agent/control-plane db:migrate   # also runs automatically on boot
+TEST_DATABASE_URL=postgres://qa:qa@localhost:5433/qa_agent_test pnpm test
 ```
 
 Useful routes with the mock data:
@@ -66,7 +77,7 @@ Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + inst
 
 ## Agent fleet
 
-With `ANTHROPIC_API_KEY` set, the control-plane orchestrates every run it starts: it loads the product context (a fallback with no surfaces until the QA manifest loader lands), builds one persona per agent (methodical / chaos-monkey / adversarial-fuzzer / impatient-user, each focused on surfaces touched by the change), runs agents in waves of `FLEET_CONCURRENCY`, steers later waves away from saturated surfaces, dedupes findings across agents, and completes the run with a verdict (`block` on any P0) and a confidence statement. The stage needs an `environmentUrl`:
+With `ANTHROPIC_API_KEY` set, the control-plane orchestrates every run it starts: it takes the run's context from the run service (change, QA manifest with touched surfaces, stage environment and budget), builds one persona per agent (methodical / chaos-monkey / adversarial-fuzzer / impatient-user, each focused on surfaces touched by the change), runs agents in waves of `FLEET_CONCURRENCY`, steers later waves away from saturated surfaces, dedupes findings across agents, and completes the run with a verdict (`block` on any P0) and a confidence statement. The stage needs an `environmentUrl` (and can set `budgetSeconds` per agent):
 
 ```bash
 pnpm --filter @qa-agent/agent install-browsers   # once; downloads Chromium
@@ -80,9 +91,20 @@ Each agent sees the full diff (patches, PR titles/bodies, linked issues), the su
 Run one agent by hand from a bundle, or the offline smoke tests (no key, no network):
 
 ```bash
-ANTHROPIC_API_KEY=... pnpm --filter @qa-agent/agent run -- --bundle bundle.json --headed
+pnpm --filter @qa-agent/agent bundle -- --manifest ../repo/.qa/manifest.yaml --base-url https://beta.example.com --out /tmp/bundle.json
+cd packages/agent && ANTHROPIC_API_KEY=... pnpm exec tsx src/cli.ts --bundle /tmp/bundle.json --headed --video
 pnpm --filter @qa-agent/agent smoke                    # real Chromium, scripted model, planted bugs
 pnpm --filter @qa-agent/control-plane orchestrator-smoke   # waves, dedupe, verdict, coverage
 ```
 
-Cost guardrails: `MAX_FLEET_SIZE` (default 8) caps `stage.fleetSize`, `AGENT_BUDGET_SECONDS` (default 600) and `AGENT_MAX_STEPS` (default 150) bound each agent. See `agent-next-steps.md` for what is stubbed.
+Cost guardrails: `MAX_FLEET_SIZE` (default 8) caps `stage.fleetSize`; each agent is bounded by the stage's `budgetSeconds` (fallback `AGENT_BUDGET_SECONDS`, default 600) and `AGENT_MAX_STEPS` (default 150). See `agent-next-steps.md` for what is stubbed.
+
+## Jira
+
+Also outbound only, so no public URL is needed. When a run finishes, findings at or above `JIRA_MIN_SEVERITY` (default P1) are filed as issues, deduped so a recurring defect comments on the existing issue instead of filing a new one. Issue keys mentioned in PRs and commits are recorded on the run's change context.
+
+1. Create a Jira project from a **Software** template (business templates have no `Bug` issue type) and note its key.
+2. Create an API token at <https://id.atlassian.com/manage-profile/security/api-tokens>.
+3. Set `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_API_TOKEN`, and `JIRA_PROJECT_KEY` in `packages/control-plane/.env`.
+
+`/healthz` reports `"jira":true` when it is on, and the control plane logs a warning at boot if the project is unreachable. Setup details and the roadmap are in `jira-next-steps.md`.

@@ -5,7 +5,7 @@ done (see checkboxes). The web reads from the control-plane when
 `CONTROL_PLANE_URL` is set and from fixtures otherwise, through
 `packages/web/src/lib/data.ts`. The control-plane
 (`packages/control-plane`) has a GitHub App, webhook handling, run lifecycle,
-an in-memory store, and a Hono JSON API. This doc is the plan for wiring the
+a Postgres store (in-memory when `DATABASE_URL` is unset), and a Hono JSON API. This doc is the plan for wiring the
 two together, in the order that keeps the UI demoable at every step.
 
 ## Where the seam is
@@ -154,19 +154,27 @@ Posting to a finished run returns 409, a mismatched `runId` 400.
 
 ## Phase 3: QA manifest read path
 
-The Manifest tab and the "Invariant violated" callout on finding detail read
-`Surface` and `Invariant`. Today both are fixtures.
+Done. Format and usage: `docs/qa-manifest.md`.
 
-- [ ] Control-plane: load `.qa/manifest.yaml` from the repo at the run's
-      `headSha` via `contents` (already have the permission). Parse to
-      `ProductContext`. Cache per `(repositoryId, sha)`.
-- [ ] `GET /api/repositories/:owner/:repo/manifest?ref=` -> `ProductContext`.
-- [ ] Snapshot the manifest onto the run (`Run.manifestVersion` or a
-      `manifestSha`) so a finding always links to the surfaces/invariants
-      that were in force when it was found, not the current head.
-- [ ] Web: implement `listSurfaces`, `listInvariants`, `getSurface`,
-      `getInvariant` against the endpoint. Pass `run.change.headSha` as
-      `ref` from the finding page.
+- [x] Control-plane: load `.qa/manifest.yaml` at the run's head SHA via
+      `contents`, validate (YAML + zod, path-specific errors), cache per
+      `(repositoryId, commitSha)` (`src/manifest/load.ts`). Missing or
+      invalid manifests never block a run; they show as a skipped/failed
+      "Load QA manifest" step and on the check.
+- [x] Surfaces map to code with `sources` globs; `touchedByChange` is
+      computed per run from `change.changedFiles`.
+- [x] `GET /api/pipelines/:id/manifest` (latest snapshot, else default branch
+      head) and `GET /api/runs/:id/manifest` (the snapshot the run used).
+- [x] Snapshot onto the run: `Run.manifest` (path, commit, status, version,
+      errors); coverage totals are filled from the manifest at run start.
+- [x] `GET /api/runs/:id/context` -> `RunContext` (change + product +
+      environment) for the agent/orchestrator.
+- [x] Web: `getPipelineManifest` / `getRunManifest` replace the four
+      fixture-only functions; the finding page resolves surface/invariant
+      against the run's manifest; the Manifest tab shows status, errors,
+      sources, and boundaries.
+- [x] `manifest:check` CLI for authoring; first real manifest for
+      `TrentK014/nike-storefront`.
 
 ## Phase 4: Live updates
 
@@ -208,10 +216,9 @@ Wire in this order; each is a Next route handler calling the control-plane.
   control-plane for server-to-server calls, and user auth on the web (GitHub
   OAuth via the same App is the least new surface area). Gate the mutating
   buttons on a signed-in user so `overriddenBy` is real.
-- Postgres. `Store` is already an interface. Add `store/postgres.ts` once
-  the findings methods above are settled so the schema is designed once.
-  Tables: installations, repositories, stages, runs, findings, deliveries,
-  manifests.
+- Postgres. Done: `store/postgres.ts` behind the `Store` interface, used when
+  `DATABASE_URL` is set, with migrations and a contract test suite shared
+  with `MemoryStore`. Local database via `pnpm db:up`.
 - Errors and empty states. Partly done: `src/app/error.tsx` shows "Control
   plane unreachable" with a retry and keeps the top nav. It sits at the root,
   so pipeline header and tabs are not kept; move a boundary into
@@ -228,6 +235,6 @@ Wire in this order; each is a Next route handler calling the control-plane.
 2. ~~Phase 1 read path with `DATA_SOURCE` switch.~~ Done.
 3. ~~Phase 2 findings, using the fixtures as the first payload.~~ Done.
 4. ~~Phase 4 polling.~~ Done.
-5. **Next:** Phase 3 manifest.
+5. ~~Phase 3 manifest.~~ Done.
 6. Auth, then Phase 5 actions starting with Trigger run and Override gate.
-7. Postgres.
+7. ~~Postgres.~~ Done.
