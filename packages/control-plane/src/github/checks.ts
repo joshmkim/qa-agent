@@ -79,9 +79,48 @@ export async function failCheck(
     completed_at: new Date().toISOString(),
     output: {
       title: `Run #${run.number} failed to complete`,
-      summary: `The QA fleet hit an infrastructure error and produced no verdict.\n\n\`\`\`\n${reason}\n\`\`\``,
+      summary: `The QA fleet hit an infrastructure error and produced no verdict.\n\n${codeBlock(reason)}`,
     },
   });
+}
+
+/**
+ * A deployment whose change context could not be assembled never gets an
+ * in-progress check, so post a completed one explaining why. Without it the
+ * promotion PR would sit on "Expected — waiting for status" with no reason.
+ */
+export async function createFailedCheck(
+  octokit: InstallationOctokit,
+  ref: RepoRef,
+  run: Run,
+  reason: string,
+  detailsUrl: string,
+): Promise<number> {
+  const { data } = await octokit.rest.checks.create({
+    ...ref,
+    name: CHECK_NAME,
+    head_sha: run.change.headSha,
+    external_id: run.id,
+    details_url: detailsUrl,
+    status: "completed",
+    conclusion: "action_required",
+    started_at: run.startedAt,
+    completed_at: run.finishedAt ?? new Date().toISOString(),
+    output: {
+      title: `Run #${run.number} could not assemble change context`,
+      summary: [
+        `Comparing from the deploy cursor \`${run.change.baseSha.slice(0, 7)}\` failed, so no fleet ran.`,
+        "The cursor was not advanced; the next push retries from the same base. If the cursor SHA is wrong, reseed it.",
+        "",
+        codeBlock(reason),
+      ].join("\n"),
+    },
+  });
+  return data.id;
+}
+
+function codeBlock(text: string): string {
+  return ["```", text, "```"].join("\n");
 }
 
 function summarizeChange(run: Run): string {

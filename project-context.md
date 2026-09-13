@@ -55,8 +55,13 @@ Every action self-recovers and returns structured failure.
 - Connect to GitHub repositories via a GitHub App.
 - Each pipeline stage maps to a deployment branch (e.g. beta -> `beta`).
 - Diff = compare(last_deployed_cursor ... head). Cursor stores both SHA and
-  PR number. First run: user supplies cursor manually; stored after.
+  PR number. First run: the first push to a mapped branch seeds the cursor
+  from the push's `before` SHA (manual `PUT .../cursor` still works; a push
+  that creates the branch needs manual seeding).
 - Cursor advances when a run STARTS (deployment happened regardless of QA).
+  Re-runs (GitHub "Re-run" on the check, or `POST /api/runs/:id/rerun`)
+  repeat the original change window and never move the cursor, except when
+  retrying a failed deployment whose base is still the cursor.
 - Deploy detection: push webhook on stage branch by default, plus an explicit
   POST /runs trigger from CI as override.
 - Gate via Checks API + branch protection on the next stage's branch.
@@ -64,8 +69,11 @@ Every action self-recovers and returns structured failure.
 ## GitHub App integration details
 - Permissions: Contents read, Pull requests read, Metadata read,
   Checks read/write. Optional: Deployments, Issues write.
-- Events: push, pull_request, check_run, installation,
-  installation_repositories.
+- Events: push and check_run (for "Re-run"). Installation events are always
+  delivered. No `pull_request` subscription: PR data comes from REST during
+  the compare.
+- Setup: `create-app` script uses the App Manifest flow so permissions and
+  events can't drift; private key lives outside the repo.
 - Auth: App JWT (RS256, 10 min) -> installation access token (1 hr), cached
   and refreshed. Use Octokit `App` + `getInstallationOctokit`.
 - Webhooks: verify X-Hub-Signature-256 (HMAC-SHA256 over raw body, constant-
@@ -97,7 +105,12 @@ it now runs 20.19, so bump once the deploy runtime is Node 20+ too. Postgres
 still planned for runs/findings; today the store is an in-memory
 implementation behind a `Store` interface.
 
-## First milestone (built, not yet exercised against a real App)
+## First milestone (built, exercised against a real App on 2026-09-13)
+Verified on `TrentK014/nike-storefront` with stages `beta -> main`: deploy
+detection, change context, check runs, branch-protection gate, GitHub
+"Re-run", failed-deployment runs, and the CI trigger. Details and remaining
+checks in `git-hub-next-steps.md` §1.
+
 `packages/control-plane` implements the thin slice: push webhook on a
 configured stage branch -> compare + PR enrichment -> `deployment.detected`
 event -> (if `stage.autoRun`) CAS-advance cursor -> persist run -> in-progress
@@ -107,8 +120,8 @@ check run on the head SHA -> `run.started` event. Orchestrator later calls
 Layout:
 - `src/config.ts` env loading (GitHub PEM inline or path, GHES base URL,
   optional Slack).
-- `src/events.ts` `EventBus` with `deployment.detected`, `run.started`,
-  `run.finished`. Integrations subscribe here, not in the run service.
+- `src/events.ts` `EventBus` with `deployment.detected`, `deployment.failed`,
+  `run.started`, `run.finished`. Integrations subscribe here, not in the run service.
 - `src/github/app.ts` App factory + install URL.
 - `src/github/webhooks.ts` Hono router for `/webhooks/github` (verify raw
   body HMAC, dedupe delivery id, 202, async dispatch) + handlers for
@@ -129,7 +142,8 @@ Layout:
 - `src/dev.ts` `POST /dev/seed`, mounted only with `DEV_SEED=true`; writes
   fixtures straight to the store so the UI can be demoed without an App.
 - `src/slack/` optional, outbound only: posts a report to a channel on
-  `run.finished`. No inbound routes, so no public URL is needed for Slack.
+  `run.finished` and a short notice on `deployment.failed`. No inbound
+  routes, so no public URL is needed for Slack.
 - `src/store/` `Store` interface + `MemoryStore` (installations, repos,
   stages, cursors, runs, findings, delivery dedupe).
 
@@ -143,7 +157,8 @@ HTTP API (only /webhooks/github is authenticated; everything else needs auth
   `PUT /api/repositories/:owner/:repo/stages/:stage`,
   `PUT /api/repositories/:owner/:repo/stages/:stage/cursor`
 - `POST /api/runs` (CI override; body `{repository, stage, sha?}`),
-  `GET /api/runs/:id`, `POST /api/runs/:id/complete`, `POST /api/runs/:id/fail`
+  `GET /api/runs/:id`, `POST /api/runs/:id/complete`, `POST /api/runs/:id/fail`,
+  `POST /api/runs/:id/rerun`
 - `GET /api/runs/:id/findings`, `POST /api/runs/:id/findings` (`Finding[]`,
   run must be active), `GET /api/findings/:id`
 - `GET /api/pipelines`, `GET /api/pipelines/:id`,
@@ -158,9 +173,9 @@ seeds the cursor via `PUT .../stages/:stage/cursor` -> next push to that
 branch starts a run.
 
 Cursor semantics as built: the compare runs *before* the cursor advances, so
-a failed compare (bad cursor SHA, revoked install) leaves the cursor and
-produces no run; the error is only in logs. Revisit if we want failed
-context assembly to still produce a visible failed run.
+a failed compare (bad cursor SHA, revoked install) leaves the cursor where it
+was. It records a `failed` run (`compareStatus: "unavailable"`), posts an
+`action_required` check on the head SHA, and emits `deployment.failed`.
 
 Deferred / known gaps:
 - Webhook handlers run in-process (fire-and-forget); needs a queue once
@@ -172,8 +187,8 @@ Deferred / known gaps:
   starting a run; a run is then started via `POST /api/runs`. Slack kickoff
   (slash command + button) was built and then cut from the MVP because it
   needs Slack to reach a public URL; see slack-next-steps.md.
-- Local runtime is Node 18, so `@slack/web-api` is pinned to 7.x (8.x needs
-  Node 20), same reason as the Octokit pins.
+- `@slack/web-api` is pinned to 7.x (8.x needs Node 20), same reason as the
+  Octokit pins.
 
 ## Web integration (built)
 `packages/web/src/lib/data.ts` is the only data seam. It uses
