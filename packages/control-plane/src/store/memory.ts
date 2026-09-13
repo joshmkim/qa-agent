@@ -1,5 +1,5 @@
-import type { DeployCursor, Finding, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
-import type { Installation, Store } from "./index";
+import type { DeployCursor, Finding, FleetConfig, ManifestSnapshot, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { Installation, Store, StoredFleetConfig } from "./index";
 
 const DELIVERY_TTL_MS = 24 * 60 * 60 * 1000;
 const SEVERITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 } as const;
@@ -19,6 +19,7 @@ export class MemoryStore implements Store {
   /** `${repositoryId}:${commitSha}` -> snapshot */
   private manifests = new Map<string, ManifestSnapshot>();
   private latestManifest = new Map<string, ManifestSnapshot>();
+  private fleetConfig: StoredFleetConfig | undefined;
 
   async upsertInstallation(inst: Installation): Promise<void> {
     this.installations.set(inst.installationId, inst);
@@ -168,5 +169,16 @@ export class MemoryStore implements Store {
     if (this.deliveries.has(deliveryId)) return false;
     this.deliveries.set(deliveryId, now);
     return true;
+  }
+
+  async getFleetConfig(): Promise<StoredFleetConfig | undefined> {
+    return this.fleetConfig;
+  }
+  async putFleetConfig(config: FleetConfig): Promise<StoredFleetConfig> {
+    this.fleetConfig = { config: structuredClone(config), updatedAt: new Date().toISOString() };
+    return this.fleetConfig;
+  }
+  async deleteFleetConfig(): Promise<void> {
+    this.fleetConfig = undefined;
   }
 }

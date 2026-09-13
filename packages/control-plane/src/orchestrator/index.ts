@@ -1,4 +1,4 @@
-import type { AgentResult, ContextBundle, Persona, Repository, Run, Stage } from "@qa-agent/shared-types";
+import type { AgentResult, ContextBundle, FleetConfig, Persona, Repository, Run, Stage } from "@qa-agent/shared-types";
 import type { EventBus } from "../events";
 import { RunError, type RunService } from "../runs/service";
 import { DiscoveryBoard } from "./discovery";
@@ -6,32 +6,24 @@ import { buildPersonas } from "./personas";
 import { runWave, type AgentRunner } from "./runner";
 import { triage } from "./triage";
 
-export { InProcessAgentRunner, type AgentRunner } from "./runner";
-export { triage, dedupeFindings } from "./triage";
-export { buildPersonas, allocateDispositions } from "./personas";
-
-export interface OrchestratorConfig {
-  /** Agents in flight at once. Each is a Chromium instance. */
-  concurrency: number;
-  /** Fallback per-agent budget; `Stage.budgetSeconds` wins when set. */
-  agentBudgetSeconds: number;
-  /** Cap on stage.fleetSize for cost control; 0 = no cap. */
-  maxFleetSize: number;
-  /** Visits before a surface counts as saturated for later waves. */
-  saturationThreshold: number;
-  /**
-   * URL-level boundaries (hosts, path prefixes) the browser blocks outright,
-   * added to every bundle. Distinct from the manifest's `boundaries`, which
-   * are policy sentences the agent reads.
-   */
-  blastRadiusBoundaries: string[];
-}
+export { InProcessAgentRunner, type AgentRunner, type AgentRunOverrides } from "./runner";
+export { triage, dedupeFindings, type TriagePolicy } from "./triage";
+export { buildPersonas, allocateDispositions, type DispositionMix } from "./personas";
 
 export interface OrchestratorDeps {
   runs: RunService;
   events: EventBus;
   runner: AgentRunner;
-  config: OrchestratorConfig;
+  /**
+   * The fleet configuration to use for the next run. Read once per run at
+   * dequeue time so edits from the Fleet page apply without a restart.
+   */
+  fleet: () => Promise<FleetConfig>;
+  /** Operator caps from the environment; the FleetConfig cannot exceed them. */
+  caps?: {
+    /** Hard cap on agents per run; 0 = no cap. */
+    maxFleetSize?: number;
+  };
   log?: (msg: string) => void;
 }
 
@@ -39,14 +31,23 @@ const STEP_CONTEXT = "Assemble context";
 const STEP_FLEET = "Fleet exploration";
 const STEP_TRIAGE = "Triage & reproduce";
 
+interface QueuedRun {
+  run: Run;
+  stage: Stage;
+  repository: Repository;
+}
+
 /**
- * Fleet orchestrator + triage judge. Listens for `run.started`, assembles a
- * ContextBundle per agent, runs the fleet in waves (steering later waves
- * away from saturated surfaces), then triages and completes the run. Any
- * infra failure ends in `failRun`, never a verdict.
+ * Fleet orchestrator + triage judge. Listens for `run.started`, queues the
+ * run, and hands it to one of `fleet.orchestrators` workers. A worker
+ * assembles a ContextBundle per agent, runs the fleet in waves (steering
+ * later waves away from saturated surfaces), then triages and completes the
+ * run. Any infra failure ends in `failRun`, never a verdict.
  */
 export class Orchestrator {
   private readonly inFlight = new Set<string>();
+  private readonly queue: QueuedRun[] = [];
+  private pumping = false;
   private readonly log: (msg: string) => void;
 
   constructor(private readonly deps: OrchestratorDeps) {
@@ -55,15 +56,61 @@ export class Orchestrator {
 
   /** Subscribe to the event bus; returns the unsubscribe function. */
   start(): () => void {
-    return this.deps.events.on("run.started", async (e) => {
-      await this.orchestrate(e.run, e.stage, e.repository);
+    return this.deps.events.on("run.started", (e) => {
+      this.enqueue({ run: e.run, stage: e.stage, repository: e.repository });
     });
   }
 
+  /** Runs being orchestrated and runs waiting for an orchestrator. */
+  activity(): { active: number; queued: number } {
+    return { active: this.inFlight.size, queued: this.queue.length };
+  }
+
+  /** Queue a run; it starts as soon as an orchestrator slot is free. */
+  enqueue(item: QueuedRun): void {
+    if (this.inFlight.has(item.run.id) || this.queue.some((q) => q.run.id === item.run.id)) return;
+    this.queue.push(item);
+    void this.pump();
+  }
+
+  /**
+   * Start queued runs while slots are free. `orchestrators` is re-read each
+   * time so lowering it takes effect as running work drains.
+   */
+  private async pump(): Promise<void> {
+    if (this.pumping) return;
+    this.pumping = true;
+    try {
+      while (this.queue.length > 0) {
+        const config = await this.deps.fleet();
+        if (this.inFlight.size >= Math.max(1, config.orchestrators)) break;
+        const next = this.queue.shift() as QueuedRun;
+        this.inFlight.add(next.run.id);
+        if (this.queue.length) this.log(`run ${next.run.id.slice(0, 8)}: dequeued; ${this.queue.length} waiting, ${this.inFlight.size}/${config.orchestrators} orchestrators busy`);
+        void this.execute(next, config).finally(() => {
+          this.inFlight.delete(next.run.id);
+          void this.pump();
+        });
+      }
+    } finally {
+      this.pumping = false;
+    }
+  }
+
+  /** Orchestrate one run directly, bypassing the queue. Used by tests and manual triggers. */
   async orchestrate(run: Run, stage: Stage, repository: Repository): Promise<Run | undefined> {
     if (this.inFlight.has(run.id)) return undefined;
     this.inFlight.add(run.id);
-    const { runs, config } = this.deps;
+    try {
+      return await this.execute({ run, stage, repository }, await this.deps.fleet());
+    } finally {
+      this.inFlight.delete(run.id);
+    }
+  }
+
+  private async execute({ run, stage, repository }: QueuedRun, config: FleetConfig): Promise<Run | undefined> {
+    const { runs } = this.deps;
+    const cap = this.deps.caps?.maxFleetSize ?? 0;
     try {
       await runs.progress(run.id, "assembling-context", { name: STEP_CONTEXT, status: "running" });
 
@@ -75,17 +122,31 @@ export class Orchestrator {
       // environment and budget. We add the per-agent fields.
       const shared = await runs.contextFor(run.id);
       const product = shared.product;
-      const fleetSize = config.maxFleetSize > 0 ? Math.min(stage.fleetSize, config.maxFleetSize) : stage.fleetSize;
-      if (fleetSize <= 0) throw new OrchestrationError(`Stage "${stage.name}" has fleetSize ${stage.fleetSize}`);
-      const personas = buildPersonas(fleetSize, product);
+      const requested = stage.fleetSize > 0 ? stage.fleetSize : config.agentsPerRun;
+      const fleetSize = cap > 0 ? Math.min(requested, cap) : requested;
+      if (fleetSize <= 0) throw new OrchestrationError(`Stage "${stage.name}" resolved to a fleet of ${fleetSize} agents`);
+      const personas = buildPersonas(fleetSize, product, { focusPerAgent: config.focusPerAgent, mix: config.dispositionMix });
       const touched = product.surfaces.filter((s) => s.touchedByChange).length;
       const budgetSeconds = stage.budgetSeconds ?? config.agentBudgetSeconds;
+      const overrides = {
+        maxSteps: config.maxSteps,
+        recordVideo: config.recordVideo,
+        scrutiny: config.scrutiny,
+        minSeverity: config.minSeverity,
+        extraInstructions: config.teamInstructions,
+        model: config.model,
+      };
 
-      await runs.progress(run.id, "assembling-context", {
-        name: STEP_CONTEXT,
-        status: "succeeded",
-        detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; code primitives ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize} x ${budgetSeconds}s`,
-      });
+      await runs.progress(
+        run.id,
+        "assembling-context",
+        {
+          name: STEP_CONTEXT,
+          status: "succeeded",
+          detail: `${run.change.pullRequests.length} PRs, ${run.change.filesChanged} files; code primitives ${product.manifestVersion}: ${product.surfaces.length} surfaces (${touched} touched), ${product.invariants.length} invariants; fleet ${fleetSize} x ${budgetSeconds}s, ${config.scrutiny} scrutiny${cap > 0 && requested > cap ? ` (capped from ${requested} by MAX_FLEET_SIZE)` : ""}`,
+        },
+        { fleet: { agentsRequested: fleetSize } },
+      );
       await runs.progress(run.id, "exploring", { name: STEP_FLEET, status: "running", detail: `0/${fleetSize} agents done` });
 
       const board = new DiscoveryBoard(config.saturationThreshold);
@@ -105,13 +166,14 @@ export class Orchestrator {
         saturatedSurfaceIds: board.saturatedSurfaceIds(),
       });
 
-      for (let start = 0; start < personas.length; start += config.concurrency) {
-        const wave = personas.slice(start, start + config.concurrency).map((p, k) => bundleFor(p, start + k));
-        this.log(`run ${run.id.slice(0, 8)}: wave ${Math.floor(start / config.concurrency) + 1}, ${wave.length} agents, ${wave[0]?.saturatedSurfaceIds.length ?? 0} saturated surfaces`);
+      const concurrency = Math.max(1, config.concurrency);
+      for (let start = 0; start < personas.length; start += concurrency) {
+        const wave = personas.slice(start, start + concurrency).map((p, k) => bundleFor(p, start + k));
+        this.log(`run ${run.id.slice(0, 8)}: wave ${Math.floor(start / concurrency) + 1}, ${wave.length} agents, ${wave[0]?.saturatedSurfaceIds.length ?? 0} saturated surfaces`);
         const waveResults = await runWave(
           wave,
-          config.concurrency,
-          (b) => this.deps.runner.run(b),
+          concurrency,
+          (b) => this.deps.runner.run(b, overrides),
           (b, err) => failedResult(b, err),
         );
         for (const r of waveResults) {
@@ -140,13 +202,21 @@ export class Orchestrator {
       }
 
       await runs.progress(run.id, "triaging", { name: STEP_TRIAGE, status: "running" });
-      const verdict = triage({ results, personas, product, change: run.change, agentsRequested: fleetSize });
+      const verdict = triage({
+        results,
+        personas,
+        product,
+        change: run.change,
+        agentsRequested: fleetSize,
+        policy: { minSeverity: config.minSeverity, blockOn: config.blockOn },
+      });
       await runs.addFindings(run.id, verdict.findings);
-      const canonical = verdict.findings.filter((f) => f.status !== "duplicate").length;
+      const canonical = verdict.findings.filter((f) => f.status !== "duplicate" && f.status !== "dismissed").length;
+      const dismissed = verdict.findings.filter((f) => f.status === "dismissed").length;
       await runs.progress(run.id, "triaging", {
         name: STEP_TRIAGE,
         status: "succeeded",
-        detail: `${canonical} distinct findings from ${verdict.findings.length} reports`,
+        detail: `${canonical} distinct findings from ${verdict.findings.length} reports${dismissed ? `, ${dismissed} below the ${config.minSeverity} floor` : ""}; blocks on ${config.blockOn}+`,
       });
 
       const completed = await runs.completeRun(run.id, {
@@ -168,8 +238,6 @@ export class Orchestrator {
         if (!(failErr instanceof RunError)) console.error("[orchestrator] failRun error:", failErr);
         return undefined;
       }
-    } finally {
-      this.inFlight.delete(run.id);
     }
   }
 }

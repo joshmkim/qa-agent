@@ -134,6 +134,7 @@ export interface Stage {
   autoRun?: boolean;
   /** Next stage's branch protected by our check run. */
   protectedBranch?: string;
+  /** Agents per run for this stage. 0 = inherit the fleet default (FleetConfig.agentsPerRun). */
   fleetSize: number;
   latestRunId?: string;
 }

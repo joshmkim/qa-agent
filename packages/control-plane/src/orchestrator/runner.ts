@@ -1,4 +1,5 @@
-import type { AgentResult, ContextBundle } from "@qa-agent/shared-types";
+import type { AgentResult, ContextBundle, Scrutiny, Severity } from "@qa-agent/shared-types";
+import type { ArtifactStore } from "../artifacts";
 
 /**
  * How the orchestrator executes one agent. In-process today; the same
@@ -6,7 +7,19 @@ import type { AgentResult, ContextBundle } from "@qa-agent/shared-types";
  * from project-context.md).
  */
 export interface AgentRunner {
-  run(bundle: ContextBundle): Promise<AgentResult>;
+  run(bundle: ContextBundle, opts?: AgentRunOverrides): Promise<AgentResult>;
+}
+
+/** Per-run knobs from the FleetConfig; each overrides the runner's construction-time default. */
+export interface AgentRunOverrides {
+  maxSteps?: number;
+  recordVideo?: boolean;
+  scrutiny?: Scrutiny;
+  minSeverity?: Severity;
+  /** Appended to the system prompt as "Team instructions". */
+  extraInstructions?: string;
+  /** Model id; empty/undefined = the agent runtime's default. */
+  model?: string;
 }
 
 export interface InProcessRunnerOptions {
@@ -16,6 +29,11 @@ export interface InProcessRunnerOptions {
   maxSteps?: number;
   /** Record a .webm per agent; path lands on AgentResult.videoPath. */
   recordVideo?: boolean;
+  /**
+   * Where screenshots/videos go and how they're addressed. Without it,
+   * evidence carries local paths the web can't render.
+   */
+  artifacts?: ArtifactStore;
   log?: (msg: string) => void;
 }
 
@@ -27,13 +45,21 @@ export interface InProcessRunnerOptions {
 export class InProcessAgentRunner implements AgentRunner {
   constructor(private readonly opts: InProcessRunnerOptions = {}) {}
 
-  async run(bundle: ContextBundle): Promise<AgentResult> {
-    const { runAgent } = await import("@qa-agent/agent");
+  async run(bundle: ContextBundle, over: AgentRunOverrides = {}): Promise<AgentResult> {
+    const { runAgent, AnthropicModelClient } = await import("@qa-agent/agent");
+    const { artifacts } = this.opts;
+    const model = over.model && over.model.trim() !== "" ? new AnthropicModelClient({ model: over.model.trim() }) : undefined;
     return runAgent(bundle, {
       headless: this.opts.headless,
       extraHTTPHeaders: this.opts.extraHTTPHeaders,
-      maxSteps: this.opts.maxSteps,
-      recordVideo: this.opts.recordVideo,
+      maxSteps: over.maxSteps ?? this.opts.maxSteps,
+      recordVideo: over.recordVideo ?? this.opts.recordVideo,
+      scrutiny: over.scrutiny,
+      minSeverity: over.minSeverity,
+      extraInstructions: over.extraInstructions && over.extraInstructions.trim() !== "" ? over.extraInstructions : undefined,
+      model,
+      screenshotDir: artifacts?.dirFor(bundle.runId, bundle.agentId),
+      artifactUrl: artifacts ? (p) => artifacts.urlFor(bundle.runId, bundle.agentId, p) : undefined,
       log: this.opts.log ? (m) => this.opts.log!(`[agent ${bundle.agentId}] ${m}`) : undefined,
     });
   }

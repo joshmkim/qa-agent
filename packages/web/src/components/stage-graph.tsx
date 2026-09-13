@@ -16,6 +16,11 @@ import { shortSha } from "@/lib/format";
 
 export function SourceColumn({ pipeline }: { pipeline: Pipeline }) {
   const repo = pipeline.repository;
+  // Both statuses are derived from what the control plane has actually seen:
+  // an installation id means the App is installed on the repo, and a stage
+  // cursor only exists once a push webhook for that branch has been received.
+  const installed = repo.installationId > 0;
+  const receiving = pipeline.stages.some((s) => s.cursor !== undefined);
   return (
     <div className="awsui-container flex w-[216px] shrink-0 flex-col">
       <div className="awsui-container-header">
@@ -26,11 +31,35 @@ export function SourceColumn({ pipeline }: { pipeline: Pipeline }) {
         </div>
       </div>
       <div className="space-y-3 p-4 text-[13px]">
-        <StepRow title="GitHub App" status={<StatusIndicator tone="success">Connected</StatusIndicator>}>
-          Installation <span className="mono">{repo.installationId}</span>
+        <StepRow
+          title="GitHub App"
+          status={
+            installed ? (
+              <StatusIndicator tone="success">Installed</StatusIndicator>
+            ) : (
+              <StatusIndicator tone="warning">Not installed</StatusIndicator>
+            )
+          }
+        >
+          {installed ? (
+            <>
+              Installation <span className="mono">{repo.installationId}</span>
+            </>
+          ) : (
+            "Install the App on this repository"
+          )}
         </StepRow>
-        <StepRow title="Webhooks" status={<StatusIndicator tone="success">Receiving</StatusIndicator>}>
-          push · pull_request · check_run
+        <StepRow
+          title="Webhooks"
+          status={
+            receiving ? (
+              <StatusIndicator tone="success">Receiving</StatusIndicator>
+            ) : (
+              <StatusIndicator tone="pending">Awaiting first push</StatusIndicator>
+            )
+          }
+        >
+          push · check_run
         </StepRow>
         <StepRow title="Default branch" status={<Pill>{repo.defaultBranch}</Pill>}>
           Stage branches: {pipeline.stages.map((s) => s.branch).join(", ")}
@@ -106,7 +135,7 @@ export async function StageColumn({
             <>
               <div className="flex flex-wrap items-center gap-1.5 text-[14px]">
                 <Link href={runHref!} className="font-medium text-link">
-                  Agentic QA
+                  BMO Bot
                 </Link>
                 <span className="text-border-strong">·</span>
                 <span className="mono text-link">{shortSha(run.change.headSha)}</span>
@@ -144,7 +173,7 @@ export async function StageColumn({
             </>
           ) : (
             <span className="text-text-secondary text-[13px]">
-              Fleet of {stage.fleetSize} agents will run on next deployment
+              {stage.fleetSize > 0 ? `Fleet of ${stage.fleetSize} agents` : "The fleet"} will run on next deployment
             </span>
           )}
         </div>

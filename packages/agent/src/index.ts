@@ -1,5 +1,6 @@
 import type { AgentResult, ContextBundle } from "@qa-agent/shared-types";
 import { BrowserSession, type BrowserSessionOptions } from "./browser/session";
+import { videoEvidence } from "./findings";
 import { ExplorationLoop, type LoopOptions } from "./loop";
 import { AnthropicModelClient } from "./model/anthropic";
 import type { ModelClient } from "./model/types";
@@ -24,8 +25,18 @@ export interface RunAgentOptions extends LoopOptions {
   extraTools?: ToolDefinition[];
   /** Headers on every browser request, e.g. a preprod bypass token resolved from credentialsRef. */
   extraHTTPHeaders?: Record<string, string>;
-  /** Record a .webm of the whole session (AGENT_RECORD_VIDEO=true). Path lands on AgentResult.videoPath. */
+  /**
+   * Record a .webm of the whole session (AGENT_RECORD_VIDEO=true). Path lands
+   * on AgentResult.videoPath and the recording is attached as `video`
+   * evidence to every finding the agent filed.
+   */
   recordVideo?: boolean;
+  /**
+   * Maps a file written under `screenshotDir` to the URL stored in
+   * Evidence.content. The orchestrator points this at the control-plane's
+   * /api/artifacts route; standalone runs keep local paths.
+   */
+  artifactUrl?: (localPath: string) => string;
   /** Called once the browser is up, before the loop starts (e.g. to log in). */
   prepare?: (session: BrowserSession) => Promise<void>;
 }
@@ -54,7 +65,8 @@ export async function runAgent(bundle: ContextBundle, opts: RunAgentOptions = {}
     visitedSurfaceIds: new Set(),
     checkedInvariantIds: new Set(),
   };
-  const ctx: ToolContext = { session, bundle, state, log };
+  const artifactUrl = opts.artifactUrl ?? ((p: string) => p);
+  const ctx: ToolContext = { session, bundle, state, log, artifactUrl };
   const registry = new ToolRegistry(opts.extraTools);
 
   let result: AgentResult | undefined;
@@ -68,6 +80,10 @@ export async function runAgent(bundle: ContextBundle, opts: RunAgentOptions = {}
     const { videoPath } = await session.close();
     if (result && videoPath) {
       result.videoPath = videoPath;
+      // The recording only exists once the context is closed, so it is
+      // attached after the fact to everything this agent filed.
+      const url = artifactUrl(videoPath);
+      for (const f of result.findings) f.evidence.push(videoEvidence(url));
       log(`video: ${videoPath}`);
     }
   }

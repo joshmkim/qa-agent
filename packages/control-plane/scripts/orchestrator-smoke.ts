@@ -5,10 +5,10 @@
  *
  *   pnpm --filter @qa-agent/control-plane orchestrator-smoke
  */
-import type { AgentResult, ContextBundle, Finding, ProductContext, Repository, Run, Stage } from "@qa-agent/shared-types";
+import { DEFAULT_FLEET_CONFIG, type AgentResult, type ContextBundle, type Finding, type FleetConfig, type ProductContext, type Repository, type Run, type Stage } from "@qa-agent/shared-types";
 import { EventBus } from "../src/events";
 import type { GitHubApp } from "../src/github/app";
-import { Orchestrator, type AgentRunner } from "../src/orchestrator";
+import { Orchestrator, type AgentRunner, type AgentRunOverrides } from "../src/orchestrator";
 import { RunService } from "../src/runs/service";
 import { MemoryStore } from "../src/store/memory";
 
@@ -66,13 +66,21 @@ function finding(b: ContextBundle, over: Partial<Finding>): Finding {
 /** Agent i behaviour is scripted by index; records the bundles it saw. */
 class ScriptedRunner implements AgentRunner {
   bundles: ContextBundle[] = [];
-  constructor(private readonly script: (i: number, b: ContextBundle) => AgentResult | Error) {}
-  async run(b: ContextBundle): Promise<AgentResult> {
+  overrides: AgentRunOverrides[] = [];
+  constructor(private readonly script: (i: number, b: ContextBundle) => AgentResult | Error | Promise<AgentResult>) {}
+  async run(b: ContextBundle, over: AgentRunOverrides = {}): Promise<AgentResult> {
     this.bundles.push(b);
-    const out = this.script(this.bundles.length - 1, b);
+    this.overrides.push(over);
+    const out = await this.script(this.bundles.length - 1, b);
     if (out instanceof Error) throw out;
     return out;
   }
+}
+
+/** A FleetConfig with the given overrides; `fleet` is what the orchestrator re-reads per run. */
+function fleetConfig(over: Partial<FleetConfig> = {}): () => Promise<FleetConfig> {
+  const cfg: FleetConfig = { ...DEFAULT_FLEET_CONFIG, dispositionMix: { ...DEFAULT_FLEET_CONFIG.dispositionMix }, ...over };
+  return async () => cfg;
 }
 
 function result(b: ContextBundle, over: Partial<AgentResult>): AgentResult {
@@ -142,7 +150,10 @@ async function scenarioBlocked() {
     if (i === 3) return new Error("browser exploded");
     return result(b, { visitedSurfaceIds: ["s_cart"], checkedInvariantIds: ["inv_stock"] });
   });
-  new Orchestrator({ runs, events, runner, log: (m) => console.log(`   ${m}`), config: { concurrency: 2, agentBudgetSeconds: 60, maxFleetSize: 0, saturationThreshold: 2, blastRadiusBoundaries: ["/admin"] } }).start();
+  new Orchestrator({
+    runs, events, runner, log: (m) => console.log(`   ${m}`),
+    fleet: fleetConfig({ concurrency: 2, agentBudgetSeconds: 60, saturationThreshold: 2, blastRadiusBoundaries: ["/admin"], scrutiny: "thorough", teamInstructions: "Check the footer." }),
+  }).start();
 
   const started = await runs.startRun({ stage, headSha: "head111", trigger: "api", change });
   const run = await finished;
@@ -172,6 +183,11 @@ async function scenarioBlocked() {
     `touched surfaces come from code primitives sources globs (${runner.bundles[0]?.product.surfaces.filter((s) => s.touchedByChange).map((s) => s.id).join()})`,
   );
   assert(new Set(runner.bundles.map((b) => b.persona.disposition)).size >= 3, `dispositions mixed: ${runner.bundles.map((b) => b.persona.disposition).join(",")}`);
+  assert(
+    runner.overrides.every((o) => o.scrutiny === "thorough" && o.extraInstructions === "Check the footer." && o.maxSteps === 150 && o.minSeverity === "P3"),
+    "fleet config reaches every agent as run overrides (scrutiny, team instructions, max steps, floor)",
+  );
+  assert(run.fleet.agentsRequested === 5 && /5 x 60s, thorough scrutiny/.test(run.steps[1]?.detail ?? ""), `context step records fleet + scrutiny: ${run.steps[1]?.detail}`);
   assert(runner.bundles.every((b) => b.persona.focusAreas.some((id) => id === "s_cart" || id === "s_checkout")), "every persona focuses on a touched surface");
   assert(findings.length === 3 && canonical.length === 2 && dup?.triage?.duplicateOf === p0?.id, `3 stored, 2 canonical, dup points at canonical`);
   assert(p0?.reproSteps.length === 3 && p0.status === "reproduced" && p0.triage?.reproducedFromCleanSession === true && p0.triage.duplicateCount === 1, "canonical P0 = shortest repro, marked reproduced");
@@ -188,11 +204,11 @@ async function scenarioPass() {
   console.log("\n# scenario: clean run");
   const { runs, events, stage, finished, change } = await setup(3);
   const runner = new ScriptedRunner((_i, b) => result(b, { visitedSurfaceIds: ["s_cart", "s_checkout", "s_home", "s_account"], checkedInvariantIds: ["inv_total", "inv_stock"] }));
-  new Orchestrator({ runs, events, runner, log: () => undefined, config: { concurrency: 4, agentBudgetSeconds: 60, maxFleetSize: 2, saturationThreshold: 2, blastRadiusBoundaries: [] } }).start();
+  new Orchestrator({ runs, events, runner, log: () => undefined, fleet: fleetConfig({ concurrency: 4, agentBudgetSeconds: 60 }), caps: { maxFleetSize: 2 } }).start();
   await runs.startRun({ stage, headSha: "head111", trigger: "api", change });
   const run = await finished;
   assert(run.status === "passed" && run.verdict === "pass", `run passed (${run.status}/${run.verdict})`);
-  assert(runner.bundles.length === 2 && run.fleet.agentsRequested === 2, `fleet capped to 2 (${runner.bundles.length})`);
+  assert(runner.bundles.length === 2 && run.fleet.agentsRequested === 2, `fleet capped to 2 by MAX_FLEET_SIZE (${runner.bundles.length})`);
   assert(/^High confidence/.test(run.confidenceStatement ?? "") && /2 of 2 changed surfaces \(100%\)/.test(run.confidenceStatement ?? ""), `statement: ${run.confidenceStatement}`);
   assert((run.confidenceScore ?? 0) > 0.9, `confidence ${run.confidenceScore}`);
 }
@@ -202,7 +218,7 @@ async function scenarioNoEnv() {
   const { runs, events, stage, finished, change, store } = await setup(2);
   await store.upsertStage({ ...stage, environmentUrl: undefined });
   const runner = new ScriptedRunner((_i, b) => result(b, {}));
-  new Orchestrator({ runs, events, runner, log: () => undefined, config: { concurrency: 1, agentBudgetSeconds: 60, maxFleetSize: 0, saturationThreshold: 2, blastRadiusBoundaries: [] } }).start();
+  new Orchestrator({ runs, events, runner, log: () => undefined, fleet: fleetConfig({ concurrency: 1, agentBudgetSeconds: 60 }) }).start();
   await runs.startRun({ stage: { ...stage, environmentUrl: undefined }, headSha: "head111", trigger: "api", change });
   const run = await finished;
   assert(run.status === "failed" && run.verdict === "pending", `run failed without verdict (${run.status}/${run.verdict})`);
@@ -210,10 +226,70 @@ async function scenarioNoEnv() {
   assert(run.steps.some((s) => s.name === "failure" && /environmentUrl/.test(s.detail ?? "")), `failure step explains: ${run.steps.at(-1)?.detail}`);
 }
 
+async function scenarioReportingPolicy() {
+  console.log("\n# scenario: P2 floor dismisses P3, blockOn=P1 blocks on a P1; stage inherits agentsPerRun");
+  const { store, runs, events, stage, finished, change } = await setup(0); // fleetSize 0 = inherit
+  const runner = new ScriptedRunner((i, b) => {
+    if (i === 0) return result(b, { findings: [finding(b, { severity: "P1", title: "Stock check skipped", dedupeKey: "stock", surfaceId: "s_checkout" })], visitedSurfaceIds: ["s_checkout"] });
+    if (i === 1) return result(b, { findings: [finding(b, { severity: "P3", title: "Footer misaligned", dedupeKey: "footer", surfaceId: "s_home" })], visitedSurfaceIds: ["s_home"] });
+    return result(b, { visitedSurfaceIds: ["s_cart"] });
+  });
+  new Orchestrator({
+    runs, events, runner, log: () => undefined,
+    fleet: fleetConfig({ agentsPerRun: 3, concurrency: 3, minSeverity: "P2", blockOn: "P1", dispositionMix: { methodical: 100, "chaos-monkey": 0, "adversarial-fuzzer": 0, "impatient-user": 0 } }),
+  }).start();
+  await runs.startRun({ stage, headSha: "head111", trigger: "api", change });
+  const run = await finished;
+  const findings = await store.listFindings(run.id);
+  const p3 = findings.find((f) => f.severity === "P3");
+  assert(runner.bundles.length === 3 && run.fleet.agentsRequested === 3, `stage fleetSize 0 inherits agentsPerRun=3 (${runner.bundles.length}, requested ${run.fleet.agentsRequested})`);
+  assert(runner.bundles.every((b) => b.persona.disposition === "methodical"), `disposition mix honored: ${runner.bundles.map((b) => b.persona.disposition).join(",")}`);
+  assert(run.verdict === "block" && run.status === "blocked", `P1 blocks when blockOn=P1 (${run.verdict})`);
+  assert(p3?.status === "dismissed" && /P2 reporting floor/.test(p3.triage?.note ?? ""), `P3 dismissed below the floor: ${p3?.status} / ${p3?.triage?.note}`);
+  assert(run.findings.total === 1 && run.findings.bySeverity.P1 === 1 && run.findings.bySeverity.P3 === 0, `counts exclude dismissed ${JSON.stringify(run.findings)}`);
+  assert(runner.overrides.every((o) => o.minSeverity === "P2"), "floor passed to agents as a prompt hint");
+}
+
+async function scenarioOrchestratorQueue() {
+  console.log("\n# scenario: 3 runs, orchestrators=1 serializes them; orchestrators=2 overlaps");
+  for (const orchestrators of [1, 2]) {
+    const { store, runs, events, stage, change } = await setup(2);
+    // Each stage needs its own cursor/branch; reuse the same stage with explicit change so three runs can start.
+    let active = 0;
+    let peak = 0;
+    const runner = new ScriptedRunner(async (_i, b) => {
+      active += 1;
+      peak = Math.max(peak, active);
+      await new Promise((r) => setTimeout(r, 30));
+      active -= 1;
+      return result(b, { visitedSurfaceIds: ["s_cart"] });
+    });
+    const orch = new Orchestrator({ runs, events, runner, log: () => undefined, fleet: fleetConfig({ orchestrators, concurrency: 1 }) });
+    orch.start();
+    const finishedIds = new Set<string>();
+    events.on("run.finished", (e) => {
+      finishedIds.add(e.run.id);
+    });
+    for (let k = 0; k < 3; k++) {
+      await store.saveManifestSnapshot("repo_1", { path: ".qa/manifest.yaml", commitSha: `head${k}`, status: "loaded", product, loadedAt: new Date().toISOString() });
+      await runs.startRun({ stage, headSha: `head${k}`, trigger: "api", keepCursor: true, change: { ...change, headSha: `head${k}` } });
+    }
+    // Wait until all three finished.
+    const deadline = Date.now() + 5_000;
+    while (finishedIds.size < 3 && Date.now() < deadline) await new Promise((r) => setTimeout(r, 20));
+    const expectedPeak = Math.min(orchestrators, 3); // concurrency=1, so peak agents == concurrent runs
+    assert(finishedIds.size === 3, `all 3 runs finished with orchestrators=${orchestrators} (${finishedIds.size})`);
+    assert(peak === expectedPeak, `peak concurrent agents ${peak} == orchestrators ${expectedPeak}`);
+    assert(orch.activity().active === 0 && orch.activity().queued === 0, `queue drained ${JSON.stringify(orch.activity())}`);
+  }
+}
+
 async function main() {
   await scenarioBlocked();
   await scenarioPass();
   await scenarioNoEnv();
+  await scenarioReportingPolicy();
+  await scenarioOrchestratorQueue();
   console.log(process.exitCode ? "\nSMOKE FAILED" : "\nSMOKE PASSED");
 }
 

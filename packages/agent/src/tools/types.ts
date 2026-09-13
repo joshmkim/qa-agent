@@ -29,6 +29,11 @@ export interface ToolContext {
   bundle: ContextBundle;
   state: AgentState;
   log: (msg: string) => void;
+  /**
+   * Maps a file the browser session wrote (screenshot, video) to the URL
+   * stored in Evidence.content. Identity (local path) for standalone runs.
+   */
+  artifactUrl: (localPath: string) => string;
 }
 
 export type ToolArgs = Record<string, unknown>;

@@ -29,12 +29,11 @@ pnpm --filter @qa-agent/control-plane db:migrate   # also runs automatically on 
 TEST_DATABASE_URL=postgres://qa:qa@localhost:5433/qa_agent_test pnpm test
 ```
 
-Useful routes with the mock data:
+Useful routes with the fixture data (modelled on `TrentK014/nike-storefront`: real repo, branches, PRs, SHAs, manifest and screenshots; runs and findings are fixtures that mirror bugs observed on the beta deployment):
 
-- `/` – pipeline list
-- `/pipelines/pl_storefront` – stage graph (beta -> gamma -> prod)
-- `/pipelines/pl_storefront/runs/run_beta_47` – a blocked run with P0 findings
-- `/pipelines/pl_storefront/runs/run_beta_47/findings/fnd_001` – finding detail with replayable action trace
+- `/` – the nike-storefront pipeline (beta -> prod)
+- `/pipelines/pl_nike_storefront/runs/run_beta_2` – latest beta run (1 P1: advertised YR24 code rejected)
+- `/pipelines/pl_nike_storefront/runs/run_beta_1/findings/fnd_004` – finding detail with action trace and beta screenshots
 
 ```bash
 pnpm --filter @qa-agent/web build

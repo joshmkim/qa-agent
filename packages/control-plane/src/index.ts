@@ -3,9 +3,11 @@ import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import type { Run } from "@qa-agent/shared-types";
 import { apiRoutes } from "./api";
+import { artifactRoutes, createArtifactStore } from "./artifacts";
 import { loadConfig } from "./config";
 import { devRoutes } from "./dev";
 import { EventBus } from "./events";
+import { FleetConfigService } from "./fleet/config";
 import { createGitHubApp } from "./github/app";
 import { githubOnboarding } from "./github/onboarding";
 import { githubWebhooks } from "./github/webhooks";
@@ -24,11 +26,20 @@ const runUrl = (run: Run) => `${config.webUrl}/pipelines/${run.repositoryId}/run
 
 const runs = new RunService({ store, github, events, runUrl, jiraProjectKeys: config.jira?.projectKeys });
 
+// Fleet page settings. Env vars are the defaults; the orchestrator (below)
+// re-reads the effective config at the start of every run.
+let orchestrator: Orchestrator | undefined;
+const fleet = new FleetConfigService({
+  store,
+  env: config.orchestrator,
+  activity: () => orchestrator?.activity() ?? { active: 0, queued: 0 },
+});
+
 const app = new Hono();
 app.get("/healthz", (c) => c.json({ ok: true, slack: Boolean(config.slack), jira: Boolean(config.jira) }));
 app.route("/webhooks", githubWebhooks({ github, store, runs, webBaseUrl: config.github.webBaseUrl }));
 app.route("/github", githubOnboarding({ github, store, config: config.github }));
-app.route("/api", apiRoutes({ store, runs }));
+app.route("/api", apiRoutes({ store, runs, fleet }));
 
 if (process.env.DEV_SEED === "true") {
   app.route("/dev", devRoutes(store));
@@ -37,13 +48,28 @@ if (process.env.DEV_SEED === "true") {
 
 if (config.orchestrator) {
   const o = config.orchestrator;
-  new Orchestrator({
+  // Screenshots and videos agents write, served back to the web UI.
+  const artifacts = createArtifactStore(o.artifactDir, config.publicUrl);
+  app.route("/api/artifacts", artifactRoutes(o.artifactDir));
+  orchestrator = new Orchestrator({
     runs,
     events,
-    runner: new InProcessAgentRunner({ headless: o.headless, maxSteps: o.maxSteps, recordVideo: o.recordVideo, log: (m) => console.log(m) }),
-    config: o,
-  }).start();
-  console.log(`[orchestrator] enabled; ${o.concurrency} agents in flight, fleet cap ${o.maxFleetSize || "none"}, budget from stage (default ${o.agentBudgetSeconds}s)`);
+    runner: new InProcessAgentRunner({
+      headless: o.headless,
+      maxSteps: o.maxSteps,
+      recordVideo: o.recordVideo,
+      artifacts,
+      log: (m) => console.log(m),
+    }),
+    fleet: () => fleet.resolve(),
+    caps: { maxFleetSize: o.maxFleetSize },
+  });
+  orchestrator.start();
+  const f = await fleet.resolve();
+  console.log(
+    `[orchestrator] enabled; ${f.orchestrators} orchestrator(s) x ${f.concurrency} agents in flight, ${f.agentsPerRun} agents/run (cap ${o.maxFleetSize || "none"}), ${f.agentBudgetSeconds}s budget, ${f.scrutiny} scrutiny; edit at ${config.webUrl}/fleet`,
+  );
+  console.log(`[artifacts] ${o.artifactDir} -> ${config.publicUrl}/api/artifacts`);
 } else {
   console.log("[orchestrator] disabled (ANTHROPIC_API_KEY not set); runs stay queued until completed via the API");
 }

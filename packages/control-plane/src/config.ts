@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Severity } from "@qa-agent/shared-types";
+import { DEFAULT_ARTIFACT_DIR } from "./artifacts";
 
 export interface GitHubConfig {
   appId: string;
@@ -32,6 +33,10 @@ export interface OrchestratorEnvConfig {
   maxSteps: number;
   /** Record a .webm per agent session. */
   recordVideo: boolean;
+  /** Where agents write screenshots/videos; served at /api/artifacts. */
+  artifactDir: string;
+  /** AGENT_MODEL; undefined = the agent runtime's built-in default. */
+  model?: string;
 }
 
 export interface JiraConfig {
@@ -130,6 +135,8 @@ function loadOrchestrator(env: NodeJS.ProcessEnv): OrchestratorEnvConfig | undef
     headless: env.AGENT_HEADLESS !== "false",
     maxSteps: Math.max(10, intEnv(env, "AGENT_MAX_STEPS", 150)),
     recordVideo: env.AGENT_RECORD_VIDEO === "true",
+    artifactDir: env.ARTIFACT_DIR && env.ARTIFACT_DIR.trim() !== "" ? env.ARTIFACT_DIR : DEFAULT_ARTIFACT_DIR,
+    model: env.AGENT_MODEL && env.AGENT_MODEL.trim() !== "" ? env.AGENT_MODEL.trim() : undefined,
   };
 }
 

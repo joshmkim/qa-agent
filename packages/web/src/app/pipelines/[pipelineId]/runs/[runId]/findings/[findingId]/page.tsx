@@ -236,8 +236,15 @@ function ActionStepRow({ step }: { step: ActionStep }) {
   );
 }
 
+/** http(s) URLs and site-relative paths can be rendered; bare filesystem paths from the agent host cannot. */
+function isServableUrl(content: string): boolean {
+  return /^https?:\/\//.test(content) || (content.startsWith("/") && !content.startsWith("/Users") && !content.startsWith("/tmp") && !content.startsWith("/var") && !content.startsWith("/private"));
+}
+
 function EvidenceRow({ evidence }: { evidence: Evidence }) {
-  const kindTone = evidence.kind === "screenshot" ? "info" : evidence.kind === "log" ? "neutral" : "warning";
+  const kindTone =
+    evidence.kind === "screenshot" || evidence.kind === "video" ? "info" : evidence.kind === "log" ? "neutral" : "warning";
+  const isMedia = evidence.kind === "screenshot" || evidence.kind === "video";
   return (
     <li className="px-5 py-3">
       <div className="flex items-center justify-between gap-2">
@@ -247,10 +254,39 @@ function EvidenceRow({ evidence }: { evidence: Evidence }) {
         </div>
         <span className="text-text-secondary whitespace-nowrap text-[12px]">{formatDateTime(evidence.capturedAt)}</span>
       </div>
-      {evidence.kind === "screenshot" ? (
-        <div className="mt-2 flex h-[140px] items-center justify-center rounded-[8px] border border-dashed border-border-strong bg-[#f7f7f5] text-text-secondary text-[12px]">
-          Screenshot placeholder · <span className="mono ml-1">{evidence.content}</span>
-        </div>
+      {isMedia ? (
+        isServableUrl(evidence.content) ? (
+          evidence.kind === "video" ? (
+            // Session recording served by the control-plane's /api/artifacts
+            // route, which supports Range requests so seeking works.
+            <video
+              controls
+              preload="metadata"
+              src={evidence.content}
+              className="mt-2 max-h-[480px] w-full rounded-[8px] border border-border bg-black"
+            >
+              Your browser cannot play this recording.{" "}
+              <a href={evidence.content} className="underline">
+                Download it
+              </a>
+              .
+            </video>
+          ) : (
+            // Screenshots come from wherever the agent uploaded them; next/image
+            // would need every host allow-listed, so use a plain img.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={evidence.content}
+              alt={evidence.label}
+              className="mt-2 max-h-[480px] w-auto rounded-[8px] border border-border bg-[#f7f7f5]"
+            />
+          )
+        ) : (
+          <div className="mt-2 flex h-[140px] flex-col items-center justify-center gap-1 rounded-[8px] border border-dashed border-border-strong bg-[#f7f7f5] text-text-secondary text-[12px]">
+            <span>{evidence.kind === "video" ? "Recording" : "Screenshot"} captured on the agent host; not uploaded yet</span>
+            <span className="mono">{evidence.content}</span>
+          </div>
+        )
       ) : (
         <pre className="mono mt-2 overflow-x-auto whitespace-pre-wrap rounded-[8px] border border-border bg-[#f7f7f5] p-3 text-[12px] leading-[18px]">
           {evidence.content}

@@ -30,8 +30,12 @@ export function dedupeKey(surfaceId: string, oracle: OracleSource, signature: st
   return createHash("sha256").update(`${surfaceId}\u0000${oracle}\u0000${normalizeSignature(signature)}`).digest("hex").slice(0, 24);
 }
 
-export function screenshotEvidence(shot: Screenshot, label = "Screenshot"): Evidence {
-  return { id: `ev_${randomUUID().slice(0, 8)}`, kind: "screenshot", label, content: shot.path, capturedAt: shot.capturedAt };
+export function screenshotEvidence(shot: Screenshot, label = "Screenshot", toUrl: (p: string) => string = (p) => p): Evidence {
+  return { id: `ev_${randomUUID().slice(0, 8)}`, kind: "screenshot", label, content: toUrl(shot.path), capturedAt: shot.capturedAt };
+}
+
+export function videoEvidence(url: string, label = "Session recording"): Evidence {
+  return { id: `ev_${randomUUID().slice(0, 8)}`, kind: "video", label, content: url, capturedAt: new Date().toISOString() };
 }
 
 export function consoleEvidence(errors: ConsoleError[]): Evidence | undefined {

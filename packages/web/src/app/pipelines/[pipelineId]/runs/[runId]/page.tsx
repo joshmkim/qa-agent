@@ -79,9 +79,6 @@ export default async function RunPage({ params }: { params: Promise<{ pipelineId
         </div>
         <div className="flex items-center gap-2">
           <Button disabled title="Coming soon">
-            Ask the fleet
-          </Button>
-          <Button disabled title="Coming soon">
             Re-run
           </Button>
           {run.verdict === "block" && (

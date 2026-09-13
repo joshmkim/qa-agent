@@ -21,11 +21,11 @@ async function collectEvidence(ctx: ToolContext, capture: boolean): Promise<Evid
     const shot = await ctx.session.screenshot("finding").catch(() => undefined);
     if (shot) {
       ctx.state.lastScreenshotId = shot.id;
-      evidence.push(screenshotEvidence(shot, "State when filed"));
+      evidence.push(screenshotEvidence(shot, "State when filed", ctx.artifactUrl));
     }
   } else if (ctx.state.lastScreenshotId) {
     const shot = ctx.session.getScreenshot(ctx.state.lastScreenshotId);
-    if (shot) evidence.push(screenshotEvidence(shot, "Last screenshot"));
+    if (shot) evidence.push(screenshotEvidence(shot, "Last screenshot", ctx.artifactUrl));
   }
   const hard = ctx.session.allConsoleErrors().filter((e) => e.kind !== "console").slice(-10);
   const consoleEv = consoleEvidence(hard);

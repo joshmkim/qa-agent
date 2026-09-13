@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import type { Finding, Stage } from "@qa-agent/shared-types";
+import { FleetConfigError, type FleetConfigService } from "./fleet/config";
 import { toPipeline } from "./pipelines";
 import { RunError, type CompleteRunInput, type RunService } from "./runs/service";
 import type { Store } from "./store";
@@ -8,6 +9,8 @@ import type { Store } from "./store";
 export interface ApiDeps {
   store: Store;
   runs: RunService;
+  /** Fleet configuration read/written by the web UI's Fleet page. */
+  fleet: FleetConfigService;
 }
 
 const STATUS_FOR: Record<RunError["code"], 400 | 404 | 409> = {
@@ -34,16 +37,30 @@ function parseLimit(raw: string | undefined): number | undefined {
  * before exposing it. Tracked as part of the auth work for the web UI.
  */
 export function apiRoutes(deps: ApiDeps): Hono {
-  const { store, runs } = deps;
+  const { store, runs, fleet } = deps;
   const app = new Hono();
 
   app.onError((err, c) => {
     if (err instanceof RunError) {
       return c.json({ error: err.code, message: err.message }, STATUS_FOR[err.code]);
     }
+    if (err instanceof FleetConfigError) {
+      return c.json({ error: "invalid-fleet-config", message: err.message, issues: err.issues }, 400);
+    }
     console.error("[api]", err);
     return c.json({ error: "internal", message: err.message }, 500);
   });
+
+  // --- fleet configuration (web Fleet page) ---
+
+  /** Effective config, its env defaults, operator caps and live orchestrator activity. */
+  app.get("/fleet", async (c) => c.json(await fleet.view()));
+
+  /** Body: Partial<FleetConfig>. Merged over the current config, validated, saved. Applies to the next run. */
+  app.put("/fleet", async (c) => c.json(await fleet.save(await c.req.json())));
+
+  /** Back to environment defaults. */
+  app.delete("/fleet", async (c) => c.json(await fleet.reset()));
 
   // --- pipelines (web read path; pipeline id == repository id) ---
 
@@ -117,7 +134,8 @@ export function apiRoutes(deps: ApiDeps): Hono {
       gatesPromotion: body.gatesPromotion ?? existing?.gatesPromotion ?? true,
       autoRun: body.autoRun ?? existing?.autoRun ?? true,
       protectedBranch: body.protectedBranch ?? existing?.protectedBranch,
-      fleetSize: body.fleetSize ?? existing?.fleetSize ?? 10,
+      // 0 = inherit FleetConfig.agentsPerRun (the Fleet page setting).
+      fleetSize: body.fleetSize ?? existing?.fleetSize ?? 0,
       latestRunId: existing?.latestRunId,
     };
     await store.upsertStage(stage);
