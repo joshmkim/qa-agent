@@ -1,8 +1,12 @@
 import { Hono } from "hono";
 import type { Repository } from "@qa-agent/shared-types";
-import type { RunService } from "../runs/service";
+import { RunError, type RunService } from "../runs/service";
 import type { Installation, Store } from "../store";
 import type { GitHubApp } from "./app";
+import { CHECK_NAME } from "./checks";
+
+/** `before` on a push that created the branch. */
+const NULL_SHA = /^0+$/;
 
 export interface WebhookDeps {
   github: GitHubApp;
@@ -97,14 +101,49 @@ export function githubWebhooks(deps: WebhookDeps): Hono {
     const repo = toRepository(payload.repository, installationId);
     await store.upsertRepository(repo);
 
-    const stage = await store.findStageByBranch(repo.id, branch);
+    let stage = await store.findStageByBranch(repo.id, branch);
     if (!stage) return;
     if (stage.cursor?.sha === payload.after) return; // already at this head
+
+    // First push after a stage is mapped: what the branch pointed at before
+    // this push is what was deployed, so use it as the base.
+    if (!stage.cursor) {
+      if (NULL_SHA.test(payload.before)) {
+        console.warn(
+          `[webhooks] ${repo.fullName}@${branch} was just created; seed its cursor with PUT .../stages/${stage.name}/cursor`,
+        );
+        return;
+      }
+      await store.setCursor(stage.id, { sha: payload.before, updatedAt: new Date().toISOString() });
+      stage = (await store.getStage(stage.id)) ?? stage;
+      console.log(`[webhooks] seeded ${repo.fullName} ${stage.name} cursor from push before ${payload.before.slice(0, 7)}`);
+    }
 
     try {
       await runs.detectDeployment(stage, payload.after, payload.pusher.name);
     } catch (err) {
+      if (err instanceof RunError && err.code === "cursor-conflict") {
+        // Expected when a delivery is replayed after a later push already won the cursor.
+        console.info(`[webhooks] ${repo.fullName}@${branch} ${payload.after.slice(0, 7)}: ${err.message}`);
+        return;
+      }
       console.error(`[webhooks] deployment handling failed for ${repo.fullName}@${branch}:`, err);
+    }
+  });
+
+  // "Re-run" on our check in GitHub's UI. external_id is the run id.
+  github.webhooks.on("check_run.rerequested", async ({ payload }) => {
+    const { check_run: check, sender } = payload;
+    if (check.name !== CHECK_NAME || !check.external_id) return;
+    try {
+      const run = await runs.rerun(check.external_id, sender.login);
+      console.log(`[webhooks] re-run #${run.number} of ${check.external_id} requested by ${sender.login}`);
+    } catch (err) {
+      if (err instanceof RunError) {
+        console.info(`[webhooks] ignoring re-run of ${check.external_id}: ${err.message}`);
+        return;
+      }
+      console.error(`[webhooks] re-run of ${check.external_id} failed:`, err);
     }
   });
 

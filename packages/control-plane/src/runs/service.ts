@@ -13,7 +13,7 @@ import {
 } from "@qa-agent/shared-types";
 import type { EventBus } from "../events";
 import type { GitHubApp } from "../github/app";
-import { completeCheck, createInProgressCheck, failCheck } from "../github/checks";
+import { completeCheck, createFailedCheck, createInProgressCheck, failCheck } from "../github/checks";
 import { computeChangeContext } from "../github/diff";
 import type { Store } from "../store";
 
@@ -32,6 +32,10 @@ export interface StartRunInput {
   triggeredBy?: string;
   /** Skip the GitHub compare if the caller already computed it. */
   change?: ChangeContext;
+  /** Set on re-runs; recorded on the new run. */
+  rerunOf?: string;
+  /** Start without advancing the cursor (re-runs of a window already deployed). */
+  keepCursor?: boolean;
 }
 
 export interface CompleteRunInput {
@@ -142,8 +146,9 @@ export class RunService {
     return data.commit.sha;
   }
 
-  async computeChange(stage: Stage, headSha: string): Promise<ChangeContext> {
-    if (!stage.cursor) {
+  /** Diff from `baseSha` (default: the stage cursor) to `headSha`. */
+  async computeChange(stage: Stage, headSha: string, baseSha = stage.cursor?.sha): Promise<ChangeContext> {
+    if (!baseSha) {
       throw new RunError(
         `Stage ${stage.name} has no deploy cursor yet; seed one before running`,
         "no-cursor",
@@ -154,7 +159,7 @@ export class RunService {
     return computeChangeContext(
       octokit,
       { owner: repo.owner, repo: repo.name },
-      stage.cursor.sha,
+      baseSha,
       headSha,
     );
   }
@@ -165,7 +170,15 @@ export class RunService {
    */
   async detectDeployment(stage: Stage, headSha: string, source: string): Promise<Run | undefined> {
     const repository = await this.repoFor(stage);
-    const change = await this.computeChange(stage, headSha);
+    let change: ChangeContext;
+    try {
+      change = await this.computeChange(stage, headSha);
+    } catch (err) {
+      // Our own precondition failures (no cursor, unknown repo) stay errors.
+      if (err instanceof RunError) throw err;
+      await this.recordFailedDeployment(repository, stage, headSha, source, err);
+      return undefined;
+    }
     const autoRun = stage.autoRun ?? true;
 
     this.deps.events.emit("deployment.detected", {
@@ -181,6 +194,119 @@ export class RunService {
     return this.startRun({ stage, headSha, trigger: "push-webhook", triggeredBy: source, change });
   }
 
+  /**
+   * Context assembly failed for a deployment. Record a failed run and a
+   * completed check so the failure is visible on GitHub, in the UI, and in
+   * Slack. The cursor is left alone so the next push retries from the same
+   * base.
+   */
+  private async recordFailedDeployment(
+    repository: Repository,
+    stage: Stage,
+    headSha: string,
+    source: string,
+    err: unknown,
+  ): Promise<Run> {
+    const { store, github, events, runUrl } = this.deps;
+    const reason = err instanceof Error ? err.message : String(err);
+    console.error(`[runs] context assembly failed for ${repository.fullName}@${stage.branch} ${headSha.slice(0, 7)}:`, err);
+
+    const now = new Date().toISOString();
+    let run = await this.newRun(stage, repository, {
+      status: "failed",
+      trigger: "push-webhook",
+      triggeredBy: source,
+      change: {
+        baseSha: stage.cursor?.sha ?? "",
+        headSha,
+        commitCount: 0,
+        filesChanged: 0,
+        pullRequests: [],
+        compareStatus: "unavailable",
+      },
+      steps: [
+        { id: randomUUID(), name: "Assemble context", status: "failed", startedAt: now, finishedAt: now, detail: reason },
+      ],
+      finishedAt: now,
+    });
+
+    try {
+      const octokit = await github.getInstallationOctokit(repository.installationId);
+      const checkRunId = await createFailedCheck(
+        octokit,
+        { owner: repository.owner, repo: repository.name },
+        run,
+        reason,
+        runUrl(run),
+      );
+      run = await store.updateRun(run.id, { checkRunId });
+    } catch (checkErr) {
+      // Often the same root cause (revoked install); the run is still recorded.
+      console.error(`[runs] failed to post failure check for ${run.id}:`, checkErr);
+    }
+
+    events.emit("deployment.failed", { repository, stage, headSha, reason, run });
+    return run;
+  }
+
+  /** Persists a new run for a stage with empty fleet/coverage/findings. */
+  private async newRun(
+    stage: Stage,
+    repository: Repository,
+    fields: Pick<Run, "status" | "trigger" | "change"> & Partial<Run>,
+  ): Promise<Run> {
+    const run: Run = {
+      id: randomUUID(),
+      repositoryId: repository.id,
+      stageId: stage.id,
+      number: await this.deps.store.nextRunNumber(stage.id),
+      verdict: "pending",
+      steps: [],
+      fleet: { ...EMPTY_FLEET, agentsRequested: stage.fleetSize },
+      coverage: { ...EMPTY_COVERAGE },
+      findings: { ...EMPTY_FINDINGS, bySeverity: { ...EMPTY_FINDINGS.bySeverity } },
+      startedAt: new Date().toISOString(),
+      ...fields,
+    };
+    await this.deps.store.createRun(run);
+    return run;
+  }
+
+  /**
+   * Repeat a finished run's change window at the same head SHA, e.g. from
+   * GitHub's "Re-run" button. Re-runs never move the cursor, with one
+   * exception: retrying a failed deployment whose base is still the cursor
+   * finishes that deployment, so the cursor advances as a push would have.
+   */
+  async rerun(runId: string, triggeredBy: string): Promise<Run> {
+    const original = await this.deps.store.getRun(runId);
+    if (!original) throw new RunError(`Run ${runId} not found`, "run-not-found");
+    if (isRunActive(original)) {
+      throw new RunError(`Run ${runId} is still ${original.status}`, "run-not-active");
+    }
+    const stage = await this.deps.store.getStage(original.stageId);
+    if (!stage) throw new RunError(`Stage ${original.stageId} not found`, "stage-not-found");
+    const { baseSha, headSha } = original.change;
+    // One in-flight run per stage head; a double-clicked "Re-run" is a no-op.
+    const inFlight = (await this.deps.store.listRuns(stage.id)).find(
+      (r) => isRunActive(r) && r.change.headSha === headSha,
+    );
+    if (inFlight) {
+      throw new RunError(`Run #${inFlight.number} is already in progress for ${headSha.slice(0, 7)}`, "run-not-active");
+    }
+    const failedDeployment = original.change.compareStatus === "unavailable";
+    return this.startRun({
+      stage,
+      headSha,
+      trigger: "rerun",
+      triggeredBy,
+      // A failed deployment never got a diff; compute it from its original base.
+      change: failedDeployment ? await this.computeChange(stage, headSha, baseSha) : original.change,
+      rerunOf: original.id,
+      keepCursor: !(failedDeployment && stage.cursor?.sha === baseSha),
+    });
+  }
+
   async startRun(input: StartRunInput): Promise<Run> {
     const { store, github, events, runUrl } = this.deps;
     // Re-read so we operate on the freshest cursor.
@@ -191,36 +317,28 @@ export class RunService {
     if (!stage.cursor) {
       throw new RunError(`Stage ${stage.name} has no deploy cursor yet`, "no-cursor");
     }
-    const lastPr = change.pullRequests.at(-1);
-    const advanced = await store.advanceCursor(stage.id, stage.cursor.sha, {
-      sha: input.headSha,
-      prNumber: lastPr?.number,
-      updatedAt: new Date().toISOString(),
-    });
-    if (!advanced) {
-      throw new RunError(
-        `Cursor for ${stage.name} moved while starting the run; retry`,
-        "cursor-conflict",
-      );
+    if (!input.keepCursor) {
+      const lastPr = change.pullRequests.at(-1);
+      const advanced = await store.advanceCursor(stage.id, stage.cursor.sha, {
+        sha: input.headSha,
+        prNumber: lastPr?.number,
+        updatedAt: new Date().toISOString(),
+      });
+      if (!advanced) {
+        throw new RunError(
+          `Cursor for ${stage.name} moved while starting the run; retry`,
+          "cursor-conflict",
+        );
+      }
     }
 
-    const run: Run = {
-      id: randomUUID(),
-      repositoryId: repository.id,
-      stageId: stage.id,
-      number: await store.nextRunNumber(stage.id),
+    const run = await this.newRun(stage, repository, {
       status: "queued",
-      verdict: "pending",
       trigger: input.trigger,
       triggeredBy: input.triggeredBy,
+      rerunOf: input.rerunOf,
       change,
-      steps: [],
-      fleet: { ...EMPTY_FLEET, agentsRequested: stage.fleetSize },
-      coverage: { ...EMPTY_COVERAGE },
-      findings: { ...EMPTY_FINDINGS, bySeverity: { ...EMPTY_FINDINGS.bySeverity } },
-      startedAt: new Date().toISOString(),
-    };
-    await store.createRun(run);
+    });
 
     let started = run;
     try {

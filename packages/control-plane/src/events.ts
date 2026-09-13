@@ -18,6 +18,19 @@ export interface DeploymentDetected {
   autoRun: boolean;
 }
 
+/**
+ * A head landed on a stage branch but its change context could not be
+ * assembled (bad cursor SHA, revoked install, rate limit). A failed run was
+ * recorded and the cursor was left where it was.
+ */
+export interface DeploymentFailed {
+  repository: Repository;
+  stage: Stage;
+  headSha: string;
+  reason: string;
+  run: Run;
+}
+
 export interface RunStarted {
   repository: Repository;
   stage: Stage;
@@ -32,6 +45,7 @@ export interface RunFinished {
 
 export interface EventMap {
   "deployment.detected": DeploymentDetected;
+  "deployment.failed": DeploymentFailed;
   "run.started": RunStarted;
   "run.finished": RunFinished;
 }
