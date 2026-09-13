@@ -88,12 +88,73 @@ Single monorepo with packages, split later along runtime-profile seam:
 - shared-types: the two contracts that are the system's real API:
   ContextBundle (orchestrator -> agent) and Finding (agent -> orchestrator).
 
-## Proposed stack (pending confirmation)
-TypeScript end to end. Node 20+, pnpm workspaces, Fastify or Hono for the
-control-plane API, Postgres for runs/findings, Octokit, Playwright.
+## Stack (decided for control-plane)
+TypeScript end to end, pnpm workspaces. Control-plane: Hono on
+@hono/node-server, `@octokit/app` + `octokit` (App auth, webhooks, REST,
+pagination). Local dev machine is Node 18.20, so pinned to the last Octokit
+majors that support Node 18 (`octokit@3`, `@octokit/app@14`); bump when the
+runtime moves to Node 20+. Postgres still planned for runs/findings; today
+the store is an in-memory implementation behind a `Store` interface.
 
-## First milestone (proposed)
-Thinnest end-to-end slice, no agents, no UI: GitHub App receives push webhook
-on a configured stage branch -> computes diff vs. stored cursor -> enriches
-with PR titles/bodies -> persists a run -> posts an in-progress check run
-back to GitHub. Proves the GitHub connection everything else builds on.
+## First milestone (built, not yet exercised against a real App)
+`packages/control-plane` implements the thin slice: push webhook on a
+configured stage branch -> compare + PR enrichment -> `deployment.detected`
+event -> (if `stage.autoRun`) CAS-advance cursor -> persist run -> in-progress
+check run on the head SHA -> `run.started` event. Orchestrator later calls
+`completeRun`/`failRun`, which finish the check and emit `run.finished`.
+
+Layout:
+- `src/config.ts` env loading (GitHub PEM inline or path, GHES base URL,
+  optional Slack).
+- `src/events.ts` `EventBus` with `deployment.detected`, `run.started`,
+  `run.finished`. Integrations subscribe here, not in the run service.
+- `src/github/app.ts` App factory + install URL.
+- `src/github/webhooks.ts` Hono router for `/webhooks/github` (verify raw
+  body HMAC, dedupe delivery id, 202, async dispatch) + handlers for
+  installation lifecycle and push. Repos are learned lazily from push
+  payloads too, which covers "all repositories" installs.
+- `src/github/onboarding.ts` `/github/*`: install redirect, setup callback,
+  installation inventory, `POST /installations/:id/sync` reconcile.
+- `src/github/diff.ts` `computeChangeContext` (paginated compare, diverged ->
+  merge base, PR enrichment, revert-pair collapse, linked-issue extraction).
+- `src/github/checks.ts` create/complete/fail check run.
+- `src/runs/service.ts` `RunService`: `detectDeployment`, `startRun`,
+  `completeRun`, `failRun`, `resolveStage`, `branchHead`.
+- `src/api.ts` `/api/*` management routes (stages, cursors, runs).
+- `src/slack/` optional bot: notifications on events, `/qa` slash command.
+- `src/store/` `Store` interface + `MemoryStore`.
+
+HTTP API (only /webhooks/github is authenticated; everything else needs auth
++ tenant isolation before public exposure):
+- `POST /webhooks/github`
+- `GET /github/install`, `GET /github/setup`, `GET /github/installations`,
+  `GET /github/installations/:id/repositories`,
+  `POST /github/installations/:id/sync`
+- `GET /api/repositories/:owner/:repo/stages`,
+  `PUT /api/repositories/:owner/:repo/stages/:stage`,
+  `PUT /api/repositories/:owner/:repo/stages/:stage/cursor`
+- `POST /api/runs` (CI override; body `{repository, stage, sha?}`),
+  `GET /api/runs/:id`, `POST /api/runs/:id/complete`, `POST /api/runs/:id/fail`
+- `/slack/commands`, `/slack/interactions` when Slack is configured
+
+Onboarding flow for an external repo: user hits `/github/install` -> GitHub
+install page -> picks org + repos -> `installation.created` webhook records
+tenant + repos -> user maps stage branches via `PUT .../stages/:stage` and
+seeds the cursor via `PUT .../stages/:stage/cursor` -> next push to that
+branch starts a run.
+
+Cursor semantics as built: the compare runs *before* the cursor advances, so
+a failed compare (bad cursor SHA, revoked install) leaves the cursor and
+produces no run; the error is only in logs. Revisit if we want failed
+context assembly to still produce a visible failed run.
+
+Deferred / known gaps:
+- Webhook handlers run in-process (fire-and-forget); needs a queue once
+  there is more than one instance.
+- PR enrichment is one REST call per commit + one per PR; switch to GraphQL
+  `associatedPullRequests` if rate limits bite on large windows.
+- No auth on management routes; no user login / tenant scoping yet.
+- `Stage.autoRun` was added to shared-types for the Slack "run on demand"
+  flow.
+- Local runtime is Node 18, so `@slack/web-api` is pinned to 7.x (8.x needs
+  Node 20), same reason as the Octokit pins.
