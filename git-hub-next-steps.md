@@ -1,60 +1,95 @@
 # GitHub Integration: Next Steps
 
-State as of this writing: `packages/control-plane` has the GitHub App auth,
+State as of 2026-09-13: `packages/control-plane` has the GitHub App auth,
 webhook receiver, installation tracking, diff + PR enrichment, check run
-posting, and run lifecycle built and typechecking. It has been smoke-tested
-locally with a fake App ID (requests reach api.github.com with a signed JWT and
-are rejected as "Integration not found"). It has not been run against a real
-GitHub App yet. That is step 1.
+posting, run lifecycle, cursor auto-seeding, failed-deployment runs, and
+re-runs from GitHub's "Re-run" button. Those paths have been exercised
+locally with signed fake webhooks and a dummy key. It has not been run
+against a real GitHub App yet. That is step 1.
 
-## 1. Prove it against a real App (do this first)
+## 1. Prove it against a real App (done 2026-09-13)
 
-Nothing below matters until this works end to end.
+Verified end to end against `TrentK014/nike-storefront` (a fork of
+`joshmkim/nike-storefront`; Next.js + Supabase) with the App
+`agentic-qa-fleet-30ba`. Stages: `beta -> main` (`main` is prod). Verdicts were
+posted by hand because the orchestrator does not exist yet; everything else
+was real GitHub traffic.
 
-- [ ] Create a GitHub App on your personal account or a test org.
-  - Permissions: Contents read, Pull requests read, Metadata read,
-    Checks read/write.
-  - Events: push, pull_request, check_run, installation,
-    installation_repositories.
-  - Setup URL: `<public>/github/setup`. Webhook URL: `<public>/webhooks/github`.
-- [ ] Start a smee.io channel, run `pnpm --filter @qa-agent/control-plane dev`,
-      fill in `.env` from `.env.example`.
-- [ ] Install the App on a throwaway repo with a `beta` branch.
-      Confirm `installation.created` lands and `GET /github/installations`
-      shows it.
-- [ ] `PUT /api/repositories/<owner>/<repo>/stages/beta` then seed the cursor
-      with the current `beta` head SHA.
-- [ ] Merge a PR to `beta`. Confirm: run created, cursor advanced,
-      `ChangeContext.pullRequests` has the PR with title/body/labels, and an
-      in-progress "Agentic QA Fleet" check appears on the head commit.
-- [ ] `POST /api/runs/<id>/complete` with a `block` verdict. Confirm the
-      check flips to failure with the summary.
-- [ ] Add branch protection on `gamma` requiring the "Agentic QA Fleet"
-      check. Confirm promotion PR from `beta` to `gamma` is blocked.
+- [x] Create the App: `pnpm --filter @qa-agent/control-plane create-app`
+      (add `--org <org>` for an org-owned App). The manifest flow gave exactly
+      Contents read, Pull requests read, Metadata read, Checks read/write and
+      the `push` + `check_run` events; GitHub accepted `check_run` in the
+      manifest. Writes `.env`, key in `~/.config/qa-agent/<slug>.pem`, smee
+      channel.
+- [x] Install on the repo only ("Only select repositories").
+- [x] Run `pnpm --filter @qa-agent/control-plane dev` and `... tunnel`.
+      If the control plane was not running during install, the
+      `installation.created` webhook is lost (and the redirect to
+      `/github/setup` shows "refused to connect"); recover with
+      `POST /github/installations/<id>/sync`.
+- [x] Create `beta` from `main`
+      (`gh api repos/<owner>/<repo>/git/refs -f ref=refs/heads/beta -f sha=<main sha>`).
+- [x] Fork gotcha: `gh repo set-default TrentK014/nike-storefront` in a clone,
+      and pass `--repo` to `gh pr create`; otherwise PRs target upstream.
+- [x] Map the stages:
+      ```bash
+      API=localhost:3001/api/repositories/TrentK014/nike-storefront/stages
+      curl -X PUT $API/beta -H 'Content-Type: application/json' -d '{"branch":"beta","order":1,"protectedBranch":"main","fleetSize":10}'
+      curl -X PUT $API/prod -H 'Content-Type: application/json' -d '{"branch":"main","order":2,"gatesPromotion":false,"fleetSize":10}'
+      ```
+- [x] Merge a PR into `beta` (TrentK014/nike-storefront#1): cursor seeded
+      from the push's `before`, run #1 started, change context correct
+      (`ahead`, 2 commits incl. merge commit, PR #1 with title/author,
+      `changedFiles` = `src/components/SaleSticker.tsx`), in-progress
+      "Agentic QA Fleet" check posted by the App on the head commit.
+- [x] Branch protection on `main` requiring `Agentic QA Fleet` from this App
+      (`app_id` pinned). Promotion PR `beta -> main`
+      (TrentK014/nike-storefront#2) is BLOCKED while the check runs.
+- [x] Post a P0 finding + `block` verdict: check -> failure, PR stays BLOCKED.
+- [x] Click "Re-run" in GitHub: `check_run.rerequested` started run #2
+      (`trigger: rerun`, `rerunOf` run #1) at the same SHA with the cursor
+      unchanged; `pass` -> check success, PR CLEAN.
+      (`POST .../check-runs/:id/rerequest` via a user token returns 404; only
+      the App or the UI button can re-request.)
+- [x] Failure path: bogus cursor on `beta`, push: run #3 `failed`
+      (`compareStatus: unavailable`, reason "Not Found"), `action_required`
+      check "could not assemble change context", cursor unchanged.
+- [x] CI trigger: reseed cursor, `POST /api/runs {repository, stage}` computed
+      the right window (1 commit, `README.md`, 0 PRs) and posted a check;
+      `pass` made the promotion PR CLEAN again.
 
-Things likely to surface here that the smoke test could not:
+Still to check:
 
-- `installation.created` payload shape for `account` on org vs user installs.
-- Compare API behavior on the first real branch-promotion merge (expect
-  `diverged`, expect merge-base fallback to kick in).
-- Check run `details_url` points at `WEB_URL/pipelines/<repoId>/runs/<runId>`.
-  The web now uses the repository id as the pipeline id, so this resolves when
-  the web runs against the control-plane (`CONTROL_PLANE_URL` set). Confirm
-  the link from a real check run.
+- [ ] Promotion diff: merge `beta -> main` and confirm the `prod` run's
+      compare (`ahead`, or `diverged` with merge-base fallback). Note that
+      `prod` has `gatesPromotion: false` but still runs QA on push.
+- [ ] `details_url` opens the run page: start the web with
+      `CONTROL_PLANE_URL=http://localhost:3001` and click "Details" on a check.
+- [ ] Org install: `installation.created` payload shape for `account` on an
+      org install (only a user install has been exercised).
+- [ ] Add `gamma` as a middle stage when a three-stage demo is wanted.
+- [ ] Not needed for the App, but needed by the agents: a URL per stage (e.g.
+      Vercel branch deployments) and Supabase data for beta kept separate
+      from prod.
 
-## 2. Decide the failed-compare behavior
+Found while testing:
 
-Current merged behavior: compare runs before the cursor advances. If compare
-fails (bad seeded SHA, revoked installation, rate limit), nothing is persisted
-and the only trace is a console error. Two options:
+- [ ] `PUT .../stages/:stage/cursor` accepts any string. Validate the SHA
+      exists (`repos.getCommit`) and expand short SHAs before storing.
+- [ ] The failed-run reason is Octokit's raw message ("Not Found -
+      https://docs.github.com/..."). Map common cases to plain text, e.g.
+      404 on compare -> "cursor SHA not found in this repository".
 
-- Keep it. Simpler, and a bad cursor keeps failing loudly on every push
-  until someone reseeds it.
-- Record a failed run anyway so the UI and Slack show something. Requires
-  creating the run before compare and marking it `failed` on error.
+## 2. Failed-compare behavior (decided, built)
 
-Pick one and write it into `project-context.md`. Leaning toward the second
-once the web UI can display failed runs; until then the first is fine.
+When a push's compare fails (bad cursor SHA, revoked installation, rate
+limit), `RunService.detectDeployment` records a `failed` run
+(`change.compareStatus: "unavailable"`, reason in the failed step), posts a
+completed `action_required` check on the head SHA, and emits
+`deployment.failed` (Slack posts a short notice). The cursor is not advanced,
+so the next push retries from the same base. Re-running that run from GitHub
+recomputes the diff from the original base and advances the cursor only if
+it still points at that base.
 
 ## 3. Durable storage
 
@@ -90,10 +125,10 @@ Handlers are fire-and-forget in process. Fine for one instance, wrong for two.
 - [ ] Retry policy for compare and check-run calls; Octokit's retry and
       throttling plugins are already loaded via the `octokit` package but the
       handler has no dead-letter path.
-- [ ] Idempotency: re-processing a `push` delivery must not create a second
-      run. The CAS on the cursor already prevents this for the same head SHA,
-      but a replayed delivery after a later push would fail with
-      `cursor-conflict`, which is correct but should be logged as expected.
+- [x] Idempotency: re-processing a `push` delivery must not create a second
+      run. The CAS on the cursor already prevents this for the same head SHA;
+      a replayed delivery after a later push fails with `cursor-conflict`,
+      which is now logged at info level as expected.
 
 ## 6. Diff quality
 
@@ -101,8 +136,9 @@ Handlers are fire-and-forget in process. Fine for one instance, wrong for two.
       GraphQL query on `associatedPullRequests` batched by commit. Current
       approach is N+M REST calls for N commits and M PRs; a 200-commit window
       burns a noticeable slice of the 5000/hr installation budget.
-- [ ] Surface `filesTruncated` on `ChangeContext` when the compare hits the
-      300-file cap instead of silently substituting PR file counts.
+- [x] Surface `filesTruncated` on `ChangeContext` when the compare hits the
+      300-file cap. `changedFiles` (path, status, additions, deletions) is
+      also kept for marking surfaces touched by the change.
 - [ ] Revert collapse only matches exact `Revert "<title>"` pairs. Decide
       whether partial reverts should be flagged rather than dropped.
 - [ ] Squash merges with a PR body that references issues in other repos

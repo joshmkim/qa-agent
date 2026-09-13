@@ -26,18 +26,17 @@ It has not yet been exercised against a real Slack workspace.
   - Confirm rendering of the report `fields` section on mobile (four fields
     wrap to two columns; check nothing truncates).
 
-## 2. Close the "missed deployment" gap
+## 2. Close the "missed deployment" gap (done)
 
-The merged design runs the GitHub compare before advancing the cursor. If the
-compare fails, the cursor is untouched and no run is created, which is the
-right recovery behavior, but the only signal is a server log line.
+If the compare fails, the cursor stays put and a failed run is recorded (see
+`git-hub-next-steps.md` §2).
 
-- [ ] Add a `deployment.failed` event to `src/events.ts` (repository, stage,
-      headSha, reason).
-- [ ] Emit it from `RunService.detectDeployment` / the push handler in
-      `src/github/webhooks.ts` when `computeChange` throws.
-- [ ] Notifier posts a short notice: "Couldn't assemble context for `abc1234`
-      on beta; will pick it up on the next push." No button, no thread.
+- [x] `deployment.failed` event in `src/events.ts` (repository, stage,
+      headSha, reason, run).
+- [x] Emitted from `RunService.detectDeployment` when `computeChange` throws.
+- [x] Notifier posts a short notice ("Couldn't assemble context for
+      `abc1234` on `beta`… the next push retries from the same base") with a
+      link to the failed run. No button, no thread.
 
 ## 3. Durable message tracking
 

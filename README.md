@@ -32,29 +32,27 @@ pnpm --filter @qa-agent/web typecheck
 
 ## Control plane
 
-1. Create a GitHub App (Settings -> Developer settings -> GitHub Apps -> New):
-   - Permissions: Contents read, Pull requests read, Metadata read, Checks read/write.
-   - Subscribe to events: push, pull_request, check_run, installation, installation_repositories.
-   - Webhook URL: your public URL + `/webhooks/github` (use a smee.io channel locally).
-   - Set a webhook secret and generate a private key.
-2. `cp packages/control-plane/.env.example packages/control-plane/.env` and fill it in.
-3. Run it:
+1. Create the GitHub App. This uses GitHub's App Manifest flow, writes `packages/control-plane/.env`, stores the private key in `~/.config/qa-agent/`, and creates a smee.io channel for local webhooks:
 
 ```bash
-pnpm --filter @qa-agent/control-plane dev        # http://localhost:3001
-npx smee-client --url https://smee.io/XXXX --target http://localhost:3001/webhooks/github
+pnpm --filter @qa-agent/control-plane create-app   # add --org <org> for an org-owned App
 ```
 
-4. Install the app on a repo via `http://localhost:3001/github/install` (set the App's "Setup URL" to `/github/setup`), then map a stage branch and seed its cursor with the SHA currently deployed there:
+2. Install the App on your repo ("Only select repositories"), then run the control plane and the webhook relay:
+
+```bash
+pnpm --filter @qa-agent/control-plane dev      # http://localhost:3001
+pnpm --filter @qa-agent/control-plane tunnel   # smee.io -> /webhooks/github
+```
+
+3. Map stage branches:
 
 ```bash
 curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta \
-  -H 'Content-Type: application/json' -d '{"branch":"beta"}'
-curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta/cursor \
-  -H 'Content-Type: application/json' -d '{"sha":"<deployed sha>"}'
+  -H 'Content-Type: application/json' -d '{"branch":"beta","protectedBranch":"gamma"}'
 ```
 
-The next push to `beta` starts a run and posts an in-progress "Agentic QA Fleet" check on the head commit. CI can trigger explicitly with `POST /api/runs {"repository":"owner/repo","stage":"beta"}`, and the orchestrator reports back via `POST /api/runs/:id/complete` or `/fail`.
+The next push to `beta` seeds the deploy cursor from the push's previous head, starts a run, and posts an in-progress "Agentic QA Fleet" check on the head commit. "Re-run" on that check starts a new run at the same SHA. CI can trigger explicitly with `POST /api/runs {"repository":"owner/repo","stage":"beta"}`, and the orchestrator reports back via `POST /api/runs/:id/complete` or `/fail`. The full go-live checklist against the test repo is in `git-hub-next-steps.md`.
 
 To exercise the UI against the control-plane without a GitHub App, start it with `DEV_SEED=true` and placeholder GitHub env, then:
 
