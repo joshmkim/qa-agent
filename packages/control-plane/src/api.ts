@@ -69,7 +69,7 @@ export function apiRoutes(deps: ApiDeps): Hono {
     );
   });
 
-  /** The pipeline's current QA manifest (status "missing"/"invalid"/"error" are 200s). */
+  /** The pipeline's current code primitives (status "missing"/"invalid"/"error" are 200s). */
   app.get("/pipelines/:id/manifest", async (c) => {
     const repo = await store.getRepository(c.req.param("id"));
     if (!repo) return c.json({ error: "repository-not-found" }, 404);

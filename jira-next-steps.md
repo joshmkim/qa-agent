@@ -184,9 +184,9 @@ free-form LLM judgment in the oracle hierarchy in `project-context.md`.
       company-managed projects, and just a heading in the description
       elsewhere. Default to parsing an "Acceptance criteria" heading out of
       the description; make the field id configurable for teams that have one.
-- [ ] Load them in `RunService.startRun` next to the manifest load, as its
+- [ ] Load them in `RunService.startRun` next to the code primitives load, as its
       own run step ("Load Jira tickets"), cached per key. Failures must never
-      block a run, exactly like a missing manifest.
+      block a run, exactly like missing code primitives.
 - [ ] Add to `ChangeContext.jiraIssues` so they flow through `RunContext` and
       into every agent's `ContextBundle`.
 - [ ] Show them on the run page and the GitHub check summary ("3 tickets
@@ -230,11 +230,11 @@ Same tradeoff that cut Slack's slash commands from its MVP.
 
 Current wiring is single-site: one token, one project, from env.
 
-- [ ] Per-repository project key. The QA manifest is the natural home — it is
+- [ ] Per-repository project key. The code primitives file is the natural home — it is
       team-owned and versioned with the code — as a `jira:` block
       (`project`, `issueType`, `minSeverity`). Falls back to env.
-      Requires a manifest schema bump in `src/manifest/load.ts` and
-      `docs/qa-manifest.md`.
+      Requires a code primitives schema bump in `src/manifest/load.ts` and
+      `docs/code-primitives.md`.
 - [ ] OAuth 2.0 (3LO) instead of a personal API token, so issues are filed by
       an app rather than one person's account. This is inbound (Atlassian
       redirects to a callback), so it needs a public URL.
@@ -270,5 +270,5 @@ Current wiring is single-site: one token, one project, from env.
 ## 9. Documentation
 
 - [ ] Add a "Jira" section to the root `README.md` mirroring section 1.
-- [ ] Document the `jira:` manifest block in `docs/qa-manifest.md` once §7
+- [ ] Document the `jira:` code primitives block in `docs/code-primitives.md` once §7
       lands.

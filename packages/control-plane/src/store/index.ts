@@ -60,7 +60,7 @@ export interface Store {
   listFindingsByRepository(repositoryId: string, limit?: number): Promise<Finding[]>;
   getFinding(findingId: string): Promise<Finding | undefined>;
 
-  // --- QA manifests (snapshot per repository + commit) ---
+  // --- code primitives (snapshot per repository + commit) ---
   saveManifestSnapshot(repositoryId: string, snapshot: ManifestSnapshot): Promise<void>;
   getManifestSnapshot(repositoryId: string, commitSha: string): Promise<ManifestSnapshot | undefined>;
   /** Most recently loaded snapshot for the repository, any commit. */

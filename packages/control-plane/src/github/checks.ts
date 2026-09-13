@@ -14,7 +14,7 @@ export async function createInProgressCheck(
   ref: RepoRef,
   run: Run,
   detailsUrl: string,
-  /** Extra markdown lines, e.g. the QA manifest and touched surfaces. */
+  /** Extra markdown lines, e.g. the code primitives and touched surfaces. */
   extra: string[] = [],
 ): Promise<number> {
   const { data } = await octokit.rest.checks.create({

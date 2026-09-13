@@ -4,7 +4,7 @@ import { Tabs } from "@/components/tabs";
 import { Button, Icons, PageHeader, Pill } from "@/components/ui";
 
 /**
- * Title, repo/manifest meta, actions, and tab strip for a pipeline. Shared by
+ * Title, repo/code primitives meta, actions, and tab strip for a pipeline. Shared by
  * the pipeline detail layout and the homepage.
  */
 export function PipelineHeader({
@@ -37,7 +37,7 @@ export function PipelineHeader({
             </a>
             <span className="text-text-secondary">·</span>
             <span className="text-text-secondary">
-              QA manifest <code className="mono">{pipeline.manifestPath}</code> @ {pipeline.manifestVersion}
+              Code primitives <code className="mono">{pipeline.manifestPath}</code> @ {pipeline.manifestVersion}
             </span>
             <Pill tone="info">GitHub App installed</Pill>
           </>
@@ -58,7 +58,7 @@ export function PipelineHeader({
           { label: "Pipeline", href: base },
           { label: "Runs", href: `${base}/runs`, prefix: true },
           { label: "Findings", href: `${base}/findings`, prefix: true },
-          { label: "QA manifest", href: `${base}/manifest` },
+          { label: "Code primitives", href: `${base}/manifest` },
           { label: "Settings", href: `${base}/settings` },
         ]}
       />
