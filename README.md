@@ -4,7 +4,7 @@ Fleet-driven QA gate for pre-production pipelines. See `project-context.md` for 
 
 ## Packages
 
-- `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Currently runs on mock data through `src/lib/data.ts`; that file is the seam for the control-plane integration.
+- `packages/web` – pipeline view + findings UI (Next.js 15, Tailwind v4). Reads through `src/lib/data.ts`: live from the control-plane when `CONTROL_PLANE_URL` is set, fixtures otherwise (force with `DATA_SOURCE=mock|api`).
 - `packages/shared-types` – the two real contracts (`ContextBundle`, `Finding`) plus control-plane data shapes (`Pipeline`, `Stage`, `Run`).
 - `packages/control-plane` – GitHub App, webhooks, cursors/diff, check runs, HTTP API. Orchestrator not started. See "Control plane" below.
 
@@ -56,4 +56,11 @@ curl -X PUT localhost:3001/api/repositories/<owner>/<repo>/stages/beta/cursor \
 
 The next push to `beta` starts a run and posts an in-progress "Agentic QA Fleet" check on the head commit. CI can trigger explicitly with `POST /api/runs {"repository":"owner/repo","stage":"beta"}`, and the orchestrator reports back via `POST /api/runs/:id/complete` or `/fail`.
 
-Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs). Only the webhook route is authenticated today. Slack reporting is outbound only (no routes); set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to enable it.
+To exercise the UI against the control-plane without a GitHub App, start it with `DEV_SEED=true` and placeholder GitHub env, then:
+
+```bash
+pnpm --filter @qa-agent/web seed                     # loads fixtures + an in-flight run_beta_48
+CONTROL_PLANE_URL=http://localhost:3001 pnpm dev     # open /pipelines/repo_storefront
+```
+
+Route groups: `/webhooks/github` (HMAC-verified), `/github/*` (onboarding + installation inventory), `/api/*` (stages, cursors, runs, findings, pipelines). Only the webhook route is authenticated today. Slack reporting is outbound only (no routes); set `SLACK_BOT_TOKEN` and `SLACK_CHANNEL_ID` to enable it.

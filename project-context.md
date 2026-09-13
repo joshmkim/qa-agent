@@ -91,10 +91,11 @@ Single monorepo with packages, split later along runtime-profile seam:
 ## Stack (decided for control-plane)
 TypeScript end to end, pnpm workspaces. Control-plane: Hono on
 @hono/node-server, `@octokit/app` + `octokit` (App auth, webhooks, REST,
-pagination). Local dev machine is Node 18.20, so pinned to the last Octokit
-majors that support Node 18 (`octokit@3`, `@octokit/app@14`); bump when the
-runtime moves to Node 20+. Postgres still planned for runs/findings; today
-the store is an in-memory implementation behind a `Store` interface.
+pagination). Pinned to the last Octokit majors that support Node 18
+(`octokit@3`, `@octokit/app@14`) from when the dev machine was on Node 18.20;
+it now runs 20.19, so bump once the deploy runtime is Node 20+ too. Postgres
+still planned for runs/findings; today the store is an in-memory
+implementation behind a `Store` interface.
 
 ## First milestone (built, not yet exercised against a real App)
 `packages/control-plane` implements the thin slice: push webhook on a
@@ -119,11 +120,18 @@ Layout:
   merge base, PR enrichment, revert-pair collapse, linked-issue extraction).
 - `src/github/checks.ts` create/complete/fail check run.
 - `src/runs/service.ts` `RunService`: `detectDeployment`, `startRun`,
-  `completeRun`, `failRun`, `resolveStage`, `branchHead`.
-- `src/api.ts` `/api/*` management routes (stages, cursors, runs).
+  `addFindings`, `completeRun` (derives `FindingCounts` from stored findings
+  when omitted), `failRun`, `resolveStage`, `branchHead`.
+- `src/api.ts` `/api/*` routes: management (stages, cursors, runs), findings
+  ingestion, and id-keyed reads for the web UI.
+- `src/pipelines.ts` `toPipeline`: a pipeline is a view over a repository and
+  its stages; `pipeline.id == repository.id`.
+- `src/dev.ts` `POST /dev/seed`, mounted only with `DEV_SEED=true`; writes
+  fixtures straight to the store so the UI can be demoed without an App.
 - `src/slack/` optional, outbound only: posts a report to a channel on
   `run.finished`. No inbound routes, so no public URL is needed for Slack.
-- `src/store/` `Store` interface + `MemoryStore`.
+- `src/store/` `Store` interface + `MemoryStore` (installations, repos,
+  stages, cursors, runs, findings, delivery dedupe).
 
 HTTP API (only /webhooks/github is authenticated; everything else needs auth
 + tenant isolation before public exposure):
@@ -136,6 +144,12 @@ HTTP API (only /webhooks/github is authenticated; everything else needs auth
   `PUT /api/repositories/:owner/:repo/stages/:stage/cursor`
 - `POST /api/runs` (CI override; body `{repository, stage, sha?}`),
   `GET /api/runs/:id`, `POST /api/runs/:id/complete`, `POST /api/runs/:id/fail`
+- `GET /api/runs/:id/findings`, `POST /api/runs/:id/findings` (`Finding[]`,
+  run must be active), `GET /api/findings/:id`
+- `GET /api/pipelines`, `GET /api/pipelines/:id`,
+  `GET /api/pipelines/:id/runs?stage=&limit=`,
+  `GET /api/pipelines/:id/findings?limit=`, `GET /api/stages/:id`
+- `POST /dev/seed` (dev only)
 
 Onboarding flow for an external repo: user hits `/github/install` -> GitHub
 install page -> picks org + repos -> `installation.created` webhook records
@@ -160,3 +174,12 @@ Deferred / known gaps:
   needs Slack to reach a public URL; see slack-next-steps.md.
 - Local runtime is Node 18, so `@slack/web-api` is pinned to 7.x (8.x needs
   Node 20), same reason as the Octokit pins.
+
+## Web integration (built)
+`packages/web/src/lib/data.ts` is the only data seam. It uses
+`src/lib/data/control-plane.ts` (server-side fetches to `CONTROL_PLANE_URL`,
+`no-store`) when `CONTROL_PLANE_URL` is set or `DATA_SOURCE=api`, and the
+fixtures in `src/lib/data/mock.ts` otherwise. QA manifest reads (surfaces,
+invariants) stay on fixtures until the manifest loader exists. Pages that
+show in-flight runs poll with `router.refresh()` every 15s. Remaining
+integration work is tracked in `pipeline-steps.MD`.

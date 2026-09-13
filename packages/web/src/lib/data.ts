@@ -1,75 +1,30 @@
 /**
- * Data access seam. Every page reads through these functions so swapping the
- * mock for the control-plane API later is a one-file change.
+ * Data access seam. Every page reads through these functions; the source is
+ * picked once here, never per page.
+ *
+ * DATA_SOURCE=mock|api wins when set. Otherwise the control plane is used when
+ * CONTROL_PLANE_URL is set, and fixtures when it isn't, so `pnpm dev` with no
+ * env keeps working for UI iteration.
  */
-import type {
-  Finding,
-  Invariant,
-  Pipeline,
-  Run,
-  Stage,
-  Surface,
-} from "@qa-agent/shared-types";
-import { pipeline, invariants, surfaces } from "./mock/pipeline";
-import { runs } from "./mock/runs";
-import { findings } from "./mock/findings";
+import * as api from "./data/control-plane";
+import * as mock from "./data/mock";
 
-const SEVERITY_RANK = { P0: 0, P1: 1, P2: 2, P3: 3 } as const;
+const useApi =
+  process.env.DATA_SOURCE === "api" || (process.env.DATA_SOURCE !== "mock" && Boolean(process.env.CONTROL_PLANE_URL));
 
-export async function listPipelines(): Promise<Pipeline[]> {
-  return [pipeline];
-}
+const source = useApi ? api : mock;
 
-export async function getPipeline(id: string): Promise<Pipeline | undefined> {
-  return id === pipeline.id ? pipeline : undefined;
-}
+export const {
+  listPipelines,
+  getPipeline,
+  getStage,
+  getRun,
+  listRuns,
+  listFindings,
+  listAllFindings,
+  getFinding,
+} = source;
 
-export async function getStage(stageId: string): Promise<Stage | undefined> {
-  return pipeline.stages.find((s) => s.id === stageId);
-}
-
-export async function getRun(runId: string): Promise<Run | undefined> {
-  return runs.find((r) => r.id === runId);
-}
-
-export async function listRuns(pipelineId: string, stageId?: string): Promise<Run[]> {
-  if (pipelineId !== pipeline.id) return [];
-  return runs
-    .filter((r) => (stageId ? r.stageId === stageId : true))
-    .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
-}
-
-export async function listFindings(runId: string): Promise<Finding[]> {
-  return findings
-    .filter((f) => f.runId === runId)
-    .sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
-}
-
-export async function listAllFindings(pipelineId: string): Promise<Finding[]> {
-  if (pipelineId !== pipeline.id) return [];
-  return [...findings].sort(
-    (a, b) =>
-      SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] ||
-      b.reportedAt.localeCompare(a.reportedAt),
-  );
-}
-
-export async function getFinding(findingId: string): Promise<Finding | undefined> {
-  return findings.find((f) => f.id === findingId);
-}
-
-export async function getSurface(surfaceId: string): Promise<Surface | undefined> {
-  return surfaces.find((s) => s.id === surfaceId);
-}
-
-export async function getInvariant(invariantId: string): Promise<Invariant | undefined> {
-  return invariants.find((i) => i.id === invariantId);
-}
-
-export async function listSurfaces(): Promise<Surface[]> {
-  return surfaces;
-}
-
-export async function listInvariants(): Promise<Invariant[]> {
-  return invariants;
-}
+// The QA manifest stays on fixtures in both modes until the control plane loads it
+// (pipeline-steps.MD Phase 3).
+export const { getSurface, getInvariant, listSurfaces, listInvariants } = mock;

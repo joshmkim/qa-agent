@@ -45,10 +45,11 @@ cursor untouched and produces no run; the only signal is a log line.
 
 ## 3. Richer reports
 
-Today the report uses `FindingCounts` only because nothing stores findings.
+Today the report uses `FindingCounts` only. Findings are now persisted
+(`store.listFindings(runId)`, most severe first), so this is unblocked.
 
-- [ ] Once findings persist, list the top N (P0/P1 first) with title,
-      surface, and a link. Cap at ~5; link to the web UI for the rest.
+- [ ] List the top N findings (P0/P1 first) with title, surface, and a
+      link. Cap at ~5; link to the web UI for the rest.
 - [ ] Show `triage.suspectedPrNumber` next to each finding when present.
 - [ ] Optional: a "run started" notice on `run.started` (outbound, so still
       no public URL) and thread the report under it. Requires persisting the

@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { TopNav } from "@/components/top-nav";
 
+// Pipeline data is live from the control plane; never prerender at build time.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Agentic QA",
   description: "Fleet-driven QA gate for pre-production pipelines",
